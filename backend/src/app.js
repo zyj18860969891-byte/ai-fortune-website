@@ -43,7 +43,8 @@ app.use('/api/fortune', fortuneRoutes);
 
 // 健康检查接口
 app.get('/health', (req, res) => {
-  res.json({
+  console.log('🔍 Health check requested from:', req.hostname);
+  res.status(200).json({
     status: 'ok',
     message: 'Service is healthy',
     timestamp: new Date().toISOString(),
