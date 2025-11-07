@@ -9,3 +9,6 @@ restartPolicyMaxRetries = 10
 [environments.production]
 NODE_ENV = "production"
 PORT = "3001"
+
+[build.nixpacks]
+buildCommand = "cd backend && npm install && npm run build"
