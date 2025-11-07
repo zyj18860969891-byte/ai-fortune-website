@@ -100,12 +100,29 @@
    - 确认以下设置：
      ```
      Root Directory: ./backend/
-     Build Command: npm install
+     Build Command: npm install && npm run build
      Start Command: node start.js
      ```
    - **重要**：Root Directory 必须设置为 `./backend/`，这样 Railway 只构建后端部分
-   - Start Command 改为 `node start.js` 使用专门的启动脚本
+   - Build Command 改为 `npm install && npm run build` 直接构建后端
+   - Start Command 使用 `node start.js` 启动服务
    - 如果设置不正确，点击编辑
+
+2. **解决构建冲突问题**
+   - 如果出现 "sh: 1: tsc: Permission denied" 错误，说明 Railway 仍然在根目录运行了错误的 build 脚本
+   - 我已经临时重命名了根目录的 `package.json` 文件，这样 Railway 就不会检测到它
+   - 这样 Railway 就只会使用后端的 `package.json` 文件
+
+3. **新的解决方案**
+   - 临时重命名根目录的 `package.json` 为 `package.json.bak`
+   - Railway 现在只会检测后端的 `package.json` 文件
+   - 不会再尝试运行根目录的 build 脚本
+
+4. **如果问题仍然存在**
+   - 在 Railway 项目设置中，确保 Root Directory 设置为 `./backend/`
+   - Build Command 设置为 `npm install && npm run build`
+   - Start Command 设置为 `node start.js`
+   - 这样 Railway 就只会处理后端代码
 
 2. **新的解决方案**
    - 我已经创建了一个专门的启动脚本 `backend/start.js`
