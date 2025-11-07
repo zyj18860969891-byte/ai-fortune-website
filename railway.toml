@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node dist/app-simple.js"
+startCommand = "node dist/smart-server.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
