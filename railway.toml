@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd backend && npm install && node src/app-simple.js"
+startCommand = "cd backend && npm install && node dist/app-simple.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
