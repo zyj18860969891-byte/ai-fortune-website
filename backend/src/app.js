@@ -41,16 +41,10 @@ app.use(express.urlencoded({ extended: true }));
 // 路由配置
 app.use('/api/fortune', fortuneRoutes);
 
-// 健康检查接口
+// 健康检查接口 - 最简单的版本
 app.get('/health', (req, res) => {
-  console.log('🔍 Health check requested from:', req.hostname);
-  res.status(200).json({
-    status: 'ok',
-    message: 'Service is healthy',
-    timestamp: new Date().toISOString(),
-    service: 'ai-fortune-backend',
-    version: '1.0.0'
-  });
+  console.log('🔍 Health check requested');
+  res.status(200).send('OK');
 });
 
 // 404 处理
