@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node start.js"
+startCommand = "cd backend && node start.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
