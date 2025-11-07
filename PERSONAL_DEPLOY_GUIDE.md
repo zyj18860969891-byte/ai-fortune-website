@@ -99,24 +99,44 @@
    - 在项目页面，点击 "Settings" 标签
    - 确认以下设置：
      ```
-     Root Directory: ./backend/
-     Build Command: npm install && npm run build
-     Start Command: node start.js
+     Root Directory: ./
+     Build Command: cd backend && npm install
+     Start Command: cd backend && node src/server.js
      ```
-   - **重要**：Root Directory 必须设置为 `./backend/`，这样 Railway 只构建后端部分
-   - Build Command 改为 `npm install && npm run build` 直接构建后端
-   - Start Command 使用 `node start.js` 启动服务
+   - **重要**：Root Directory 设置为 `./` 让 Railway 处理整个项目
+   - Build Command 改为 `cd backend && npm install` 只安装依赖
+   - Start Command 使用 `cd backend && node src/server.js` 直接启动 JavaScript 服务器
    - 如果设置不正确，点击编辑
 
-2. **解决构建冲突问题**
-   - 如果出现 "sh: 1: tsc: Permission denied" 错误，说明 Railway 仍然在根目录运行了错误的 build 脚本
-   - 我已经临时重命名了根目录的 `package.json` 文件，这样 Railway 就不会检测到它
-   - 这样 Railway 就只会使用后端的 `package.json` 文件
+2. **解决 TypeScript 编译权限问题**
+   - 如果出现 "sh: 1: tsc: 权限被拒绝" 错误，说明 Railway 容器中没有 TypeScript 编译器
+   - 我已经创建了一个纯 JavaScript 版本的 server.js 文件
+   - 这样 Railway 就不需要编译 TypeScript 了，直接运行 JavaScript 代码
 
 3. **新的解决方案**
-   - 临时重命名根目录的 `package.json` 为 `package.json.bak`
-   - Railway 现在只会检测后端的 `package.json` 文件
-   - 不会再尝试运行根目录的 build 脚本
+   - 创建了 `backend/src/server.js` 文件，这是 server.ts 的 JavaScript 版本
+   - railway.toml 已更新为直接运行 JavaScript 文件
+   - Railway 现在只需要安装依赖，然后直接启动服务器
+
+3. **新的启动流程**
+   - Railway 会先安装依赖
+   - 然后运行 start.js 脚本
+   - start.js 会检查是否已构建，如果没有会先构建 TypeScript 代码
+   - 最后启动编译后的 JavaScript 服务器
+
+2. **解决构建冲突问题**
+   - 如果出现 "Nixpacks was unable to generate a build plan" 错误，说明 Railway 找不到合适的构建配置
+   - 我已经恢复了根目录的 `package.json` 文件，但使用了简化的版本
+   - 简化的 package.json 不会触发前端构建，只会让 Railway 检测到项目
+
+3. **新的解决方案**
+   - 恢复根目录的 `package.json` 文件，但使用简化的版本
+   - 简化的 package.json 只包含基本信息，不会触发复杂的构建脚本
+   - Railway 现在会正确检测到项目并构建后端
+
+4. **关键配置**
+   - railway.toml 中的 `startCommand` 已更新为 `cd backend && node start.js`
+   - 这样 Railway 会正确进入后端目录并启动服务
 
 4. **如果问题仍然存在**
    - 在 Railway 项目设置中，确保 Root Directory 设置为 `./backend/`

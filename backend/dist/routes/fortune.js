@@ -1,290 +1,147 @@
-"use strict";
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const realModelScopeOnlineService_1 = require("../services/realModelScopeOnlineService");
-const msAgentStyleMcpService_1 = require("../services/msAgentStyleMcpService");
-const router = (0, express_1.Router)();
-const mcpService = msAgentStyleMcpService_1.MsAgentStyleMcpService.getInstance();
-// 聊天接口
+const express = require('express');
+const { RealModelScopeOnlineService } = require('../services/realModelScopeOnlineService');
+const { MsAgentStyleMcpService } = require('../services/msAgentStyleMcpService');
+
+const router = express.Router();
+
+const mcpService = MsAgentStyleMcpService.getInstance();
+
+// 全局出生日期缓存，用于跨请求保存出生信息
+const birthDataCache = new Map();
+
+// 从上下文提取并缓存出生日期的函数
+function extractAndCacheBirthData(context, sessionId) {
+  if (!context) return null;
+  
+  console.log('🔍 开始从上下文提取出生数据，context长度:', context.length);
+  
+  // 方法1：从上下文中提取用户提供的出生日期（不提取占卜师的回复）
+  const userMessages = context.split('\n').filter(line => 
+    line.startsWith('用户:') && !line.includes('占卜师:')
+  );
+  
+  let birthDate = null;
+  let zodiac = null;
+  
+  // 从用户消息中提取出生日期
+  for (const message of userMessages) {
+    const dateMatch = message.match(/(\d{4}年\d{1,2}月\d{1,2}日)/);
+    if (dateMatch) {
+      birthDate = dateMatch[1];
+      console.log('✅ 找到出生日期:', birthDate);
+      break;
+    }
+  }
+  
+  // 从用户消息中提取星座
+  for (const message of userMessages) {
+    const zodiacMatch = message.match(/(水瓶座|白羊座|金牛座|双子座|巨蟹座|狮子座|处女座|天秤座|天蝎座|射手座|摩羯座|双鱼座)/);
+    if (zodiacMatch) {
+      zodiac = zodiacMatch[1];
+      console.log('✅ 找到星座:', zodiac);
+      break;
+    }
+  }
+  
+  // 如果找到了出生日期，缓存它
+  if (birthDate && sessionId) {
+    birthDataCache.set(sessionId, { birthDate, zodiac, timestamp: Date.now() });
+    console.log('✅ 已缓存出生数据:', { birthDate, zodiac });
+  }
+  
+  return { birthDate, zodiac };
+}
+
+// 生成八字命理分析
+router.post('/generate', async (req, res) => {
+  try {
+    const { birthDate, zodiac, context } = req.body;
+    
+    if (!birthDate) {
+      return res.status(400).json({
+        error: 'Missing birth date',
+        message: '请提供出生日期（格式：YYYY年MM月DD日）'
+      });
+    }
+    
+    console.log('🎯 收到八字命理请求:', { birthDate, zodiac });
+    
+    // 提取并缓存出生数据
+    const sessionId = req.sessionID || Date.now().toString();
+    const extractedData = extractAndCacheBirthData(context, sessionId);
+    
+    // 使用 ModelScope 服务进行 AI 分析
+    const modelScopeService = new RealModelScopeOnlineService();
+    const result = await modelScopeService.generateFortune(birthDate, zodiac, context);
+    
+    console.log('✅ 八字命理分析完成');
+    
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ 八字命理分析失败:', error);
+    res.status(500).json({
+      error: 'Analysis failed',
+      message: '八字分析失败，请稍后重试'
+    });
+  }
+});
+
+// AI 聊天功能
 router.post('/chat', async (req, res) => {
-    const startTime = Date.now();
-    try {
-        const requestData = req.body;
-        if (!requestData.question || !requestData.type) {
-            return res.status(400).json({
-                success: false,
-                error: '缺少必要参数：question 和 type',
-                timestamp: new Date().toISOString()
-            });
-        }
-        console.log('💬 收到八字MCP + ModelScope AI聊天请求:', {
-            question: requestData.question,
-            type: requestData.type,
-            context: requestData.context,
-            hasBirthInfo: !!requestData.birthInfo,
-            body: req.body
-        });
-        let baziData = null;
-        let birthData = null;
-        let analysisType = 'general';
-        // 只要用户请求八字分析（type: 'bazi'），就调用八字MCP服务
-        if (requestData.type === 'bazi') {
-            try {
-                console.log('🔮 调用@cantian-ai/Bazi-MCP服务（聊天模式）...');
-                // 如果用户提供了出生信息，使用用户的出生信息
-                // 否则，不进行八字分析，返回提示信息
-                birthData = requestData.birthInfo ||
-                    extractBirthDataFromQuestion(requestData.question || '');
-                // 只有在用户直接输入中找不到出生信息时，才从上下文中提取
-                if (!birthData && requestData.context) {
-                    birthData = extractBirthDataFromContext(requestData.context || '');
-                }
-                console.log('🔍 提取的出生数据:', birthData);
-                // 如果没有找到出生信息，不调用八字MCP服务
-                if (!birthData) {
-                    console.log('⚠️ 用户请求八字分析但未提供出生信息，需要用户提供出生日期');
-                    analysisType = 'bazi-requested-no-birthdata';
-                }
-                if (birthData) {
-                    const baziResult = await mcpService.calculateBazi(birthData);
-                    if (baziResult.success) {
-                        // 解析MCP返回的八字数据
-                        try {
-                            const mcpContent = baziResult.data?.content?.[0]?.text;
-                            if (mcpContent) {
-                                baziData = JSON.parse(mcpContent);
-                                analysisType = 'bazi-enhanced';
-                                console.log('✅ 聊天模式八字MCP计算成功');
-                                console.log('📊 八字数据:', {
-                                    '八字': baziData.八字,
-                                    '生肖': baziData.生肖,
-                                    '日主': baziData.日主,
-                                    '阳历': baziData.阳历
-                                });
-                            }
-                            else {
-                                console.log('⚠️ MCP返回数据格式异常:', baziResult.data);
-                            }
-                        }
-                        catch (parseError) {
-                            console.log('⚠️ 八字数据JSON解析失败:', parseError);
-                            baziData = baziResult.data;
-                        }
-                    }
-                    else {
-                        console.log('⚠️ 八字MCP计算失败:', baziResult.message);
-                    }
-                }
-                else {
-                    console.log('⚠️ 未找到有效的生辰数据');
-                }
-            }
-            catch (error) {
-                console.warn('⚠️ 聊天模式八字MCP调用失败:', error);
-            }
-        }
-        else {
-            console.log('⚠️ 非八字分析请求，使用通用分析');
-            analysisType = 'general';
-        }
-        const modelConfig = {
-            apiKey: process.env.MODELSCOPE_API_KEY || 'ms-bf1291c1-c1ed-464c-b8d8-162fdee96180',
-            modelId: process.env.MODELSCOPE_MODEL || 'ZhipuAI/GLM-4.6',
-            baseUrl: process.env.MODELSCOPE_BASE_URL || 'https://api-inference.modelscope.cn/v1'
-        };
-        console.log('🔧 模型配置:', {
-            '环境变量 MODELSCOPE_MODEL': process.env.MODELSCOPE_MODEL,
-            '实际使用的模型': modelConfig.modelId,
-            'API Key前缀': modelConfig.apiKey.substring(0, 10) + '...',
-            '基础URL': modelConfig.baseUrl
-        });
-        const realModelService = new realModelScopeOnlineService_1.RealModelScopeOnlineService(modelConfig);
-        let enhancedQuestion = requestData.question;
-        let systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。请输入您的问题，我会为您提供专业的占卜分析和建议。';
-        if (!birthData && requestData.type === 'bazi') {
-            // 用户请求八字分析但未提供出生信息
-            enhancedQuestion = `${requestData.question}\n\n注意：您请求的是八字分析，但未提供出生信息。要进行准确的八字分析，请提供您的出生日期（如：1990.05.15 或 1990年5月15日）。`;
-            systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。您请求的是八字分析，但未提供出生信息。请告知用户需要提供出生信息才能进行准确的八字分析。';
-        }
-        else if (baziData) {
-            // 构建精简但完整的八字分析数据给AI
-            const completeBaziInfo = `
-=== 八字专业分析数据 ===
-八字：${baziData.八字 || '未知'}
-日主：${baziData.日主 || '未知'}（${baziData.日柱?.天干?.五行 || '未知'}）
-生肖：${baziData.生肖 || '未知'}
-阳历：${baziData.阳历 || '未知'}
-农历：${baziData.农历 || '未知'}
-纳音：${baziData.年柱?.纳音 || '未知'}
-
-=== 核心柱信息 ===
-年柱：${baziData.年柱?.天干?.天干}${baziData.年柱?.地支?.地支}（${baziData.年柱?.天干?.五行}）${baziData.年柱?.天干?.十神}
-月柱：${baziData.月柱?.天干?.天干}${baziData.月柱?.地支?.地支}（${baziData.月柱?.天干?.五行}）${baziData.月柱?.天干?.十神}
-日柱：${baziData.日柱?.天干?.天干}${baziData.日柱?.地支?.地支}（${baziData.日柱?.天干?.五行}）${baziData.日柱?.天干?.十神}
-时柱：${baziData.时柱?.天干?.天干}${baziData.时柱?.地支?.地支}（${baziData.时柱?.天干?.五行}）${baziData.时柱?.天干?.十神}
-
-=== 重要大运（当前及未来） ===
-${baziData.大运?.大运?.slice(0, 3).map((d) => `${d.干支}（${d.开始年龄}-${d.结束年龄}岁）：${d.天干十神}`).join('\n') || '暂无大运信息'}
-
-=== 刑冲合会要点 ===
-${Object.entries(baziData.刑冲合会 || {}).map(([key, value]) => {
-                const issues = [];
-                if (value?.地支?.冲)
-                    issues.push(`${key}柱冲`);
-                if (value?.地支?.刑)
-                    issues.push(`${key}柱刑`);
-                if (value?.地支?.半合)
-                    issues.push(`${key}柱半合`);
-                if (value?.伏吟)
-                    issues.push(`${key}柱伏吟`);
-                return issues.length > 0 ? `${key}柱：${issues.join('、')}` : '';
-            }).filter(Boolean).join('\n') || '暂无刑冲合会信息'}
-
-=== 神煞要点 ===
-${Object.entries(baziData.神煞 || {}).map(([key, value]) => `${key}：${Array.isArray(value) ? value.slice(0, 3).join('、') : value}`).join('\n') || '暂无神煞信息'}
-
-=== 命宫身宫 ===
-胎元：${baziData.胎元 || '未知'} | 胎息：${baziData.胎息 || '未知'}
-命宫：${baziData.命宫 || '未知'} | 身宫：${baziData.身宫 || '未知'}
-`;
-            // 修改策略：平衡简化与完整性，让AI自然发挥但提供足够信息
-            enhancedQuestion = `${requestData.question}\n\n八字：${baziData.八字 || '未知'}\n日主：${baziData.日主 || '未知'}\n生肖：${baziData.生肖 || '未知'}\n农历：${baziData.农历 || '未知'}\n阳历：${baziData.阳历 || '未知'}\n\n请基于以上八字信息，给出自然流畅的命理分析。`;
-            systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。请基于八字数据给出自然流畅的命理分析。';
-        }
-        else if (requestData.type === 'bazi') {
-            enhancedQuestion = `${requestData.question}\n\n注意：您请求的是八字分析，但未提供出生信息。我将为您提供一般性的占卜分析，建议您提供出生信息以获得更精准的八字分析。`;
-            systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。您请求的是八字分析，但未提供出生信息。我将为您提供一般性的占卜分析，建议您提供出生信息以获得更精准的八字分析。';
-        }
-        console.log('🔍 调试信息:', {
-            enhancedQuestion,
-            context: requestData.context,
-            type: requestData.type,
-            systemPrompt,
-            baziData: !!baziData
-        });
-        const result = await realModelService.generateFortune(enhancedQuestion, requestData.context, requestData.type, systemPrompt);
-        const endTime = Date.now();
-        console.log('🎯 AI分析结果详情:', {
-            'success': result.success,
-            'prediction长度': result.prediction?.length || 0,
-            'prediction预览': result.prediction?.substring(0, 100) + '...',
-            'source': result.source,
-            'confidence': result.confidence,
-            'processingTime': `${endTime - startTime}ms`
-        });
-        console.log('✅ 八字MCP + ModelScope AI聊天分析完成:', {
-            success: result.success,
-            source: result.source,
-            hasBaziData: !!baziData,
-            processingTime: `${endTime - startTime}ms`
-        });
-        const responseData = {
-            success: true,
-            response: result.prediction,
-            source: result.source,
-            hasBaziData: !!baziData,
-            timestamp: new Date().toISOString()
-        };
-        console.log('📤 返回给前端的响应数据:', {
-            'response长度': responseData.response?.length || 0,
-            'response预览': responseData.response?.substring(0, 100) + '...'
-        });
-        res.json(responseData);
+  try {
+    const { message, context, birthDate, zodiac } = req.body;
+    
+    if (!message) {
+      return res.status(400).json({
+        error: 'Missing message',
+        message: '请提供聊天消息'
+      });
     }
-    catch (error) {
-        console.error('❌ 八字MCP + ModelScope AI聊天失败:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || '聊天服务暂时不可用，请稍后再试',
-            timestamp: new Date().toISOString()
-        });
-    }
+    
+    console.log('💬 收到聊天请求:', { message, birthDate, zodiac });
+    
+    // 提取并缓存出生数据
+    const sessionId = req.sessionID || Date.now().toString();
+    const extractedData = extractAndCacheBirthData(context, sessionId);
+    
+    // 使用 ModelScope 服务进行 AI 聊天
+    const modelScopeService = new RealModelScopeOnlineService();
+    const result = await modelScopeService.chatWithAI(message, context, birthDate, zodiac);
+    
+    console.log('✅ AI 聊天完成');
+    
+    res.json({
+      success: true,
+      data: result,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ AI 聊天失败:', error);
+    res.status(500).json({
+      error: 'Chat failed',
+      message: '聊天失败，请稍后重试'
+    });
+  }
 });
-// 状态接口
+
+// 获取服务状态
 router.get('/status', (req, res) => {
-    const config = mcpService.getMcpConfig();
-    res.json({
-        success: true,
-        status: 'active',
-        services: {
-            baziAnalysis: {
-                enabled: true,
-                service: '@cantian-ai/Bazi-MCP (ms-agent风格)',
-                endpoint: 'https://mcp.api-inference.modelscope.net/6a57768488dc47/mcp',
-                protocol: 'ModelContextProtocol'
-            },
-            modelScope: {
-                enabled: true,
-                model: 'ZhipuAI/GLM-4.6'
-            }
-        },
-        capabilities: [
-            '八字命理分析',
-            'MCP协议集成',
-            '实时聊天',
-            '生辰数据提取'
-        ],
-        timestamp: new Date().toISOString()
-    });
-});
-// 健康检查
-router.get('/health', (req, res) => {
-    res.json({
-        healthy: true,
-        service: 'AI算命服务 (MCP + ModelScope)',
-        version: '2.0.0',
-        features: ['八字MCP', 'ModelScope AI', '实时分析'],
-        timestamp: new Date().toISOString()
-    });
-});
-// 工具函数
-function extractBirthDataFromContext(context) {
-    if (!context)
-        return null;
-    const patterns = [
-        /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
-        /(\d{4})年(\d{1,2})月(\d{1,2})日/g,
-        /出生.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g
-    ];
-    for (const pattern of patterns) {
-        const match = pattern.exec(context);
-        if (match) {
-            return {
-                year: parseInt(match[1]),
-                month: parseInt(match[2]),
-                day: parseInt(match[3]),
-                hour: 0,
-                minute: 0,
-                gender: 'male',
-                timezone: 'Asia/Shanghai'
-            };
-        }
+  res.json({
+    status: 'healthy',
+    service: 'ai-fortune-backend',
+    timestamp: new Date().toISOString(),
+    features: {
+      fortuneAnalysis: true,
+      aiChat: true,
+      baziCalculation: true
     }
-    return null;
-}
-function extractBirthDataFromQuestion(question) {
-    if (!question)
-        return null;
-    const patterns = [
-        /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
-        /(\d{4})年(\d{1,2})月(\d{1,2})日/g,
-        /出生于.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
-    ];
-    for (const pattern of patterns) {
-        const match = pattern.exec(question);
-        if (match) {
-            return {
-                year: parseInt(match[1]),
-                month: parseInt(match[2]),
-                day: parseInt(match[3]),
-                hour: 0,
-                minute: 0,
-                gender: 'male',
-                timezone: 'Asia/Shanghai'
-            };
-        }
-    }
-    return null;
-}
-exports.default = router;
-//# sourceMappingURL=fortune.js.map
+  });
+});
+
+module.exports = router;
