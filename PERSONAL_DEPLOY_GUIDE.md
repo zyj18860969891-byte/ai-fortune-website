@@ -35,7 +35,7 @@
    - 添加远程仓库：`git remote add origin https://github.com/zyj18860969891-byte/ai-fortune-website.git`
    - 添加所有文件：`git add .`
    - 提交更改：`git commit -m "Initial commit - AI fortune telling website"`
-   - 推送到 GitHub：`git push -u origin main`
+   - 推送到 GitHub：`git push -u origin master`
    
    **或者使用 GitHub Desktop：**
    - 打开 GitHub Desktop
@@ -84,6 +84,7 @@
 3. **等待项目创建**
    - Railway会自动拉取代码
    - 看到 "Creating project..." 进度
+   - 如果出现 "Error creating build plan with railpack" 错误，请等待 Railway 自动重试或手动点击 "Redeploy"
 
 **✅ 第3步完成标志：**
 - 进入项目详情页面
@@ -98,11 +99,23 @@
    - 在项目页面，点击 "Settings" 标签
    - 确认以下设置：
      ```
-     Root Directory: ./
-     Build Command: npm install && npm run build:backend
-     Start Command: cd backend && npm start
+     Root Directory: ./backend/
+     Build Command: npm install
+     Start Command: node start.js
      ```
+   - **重要**：Root Directory 必须设置为 `./backend/`，这样 Railway 只构建后端部分
+   - Start Command 改为 `node start.js` 使用专门的启动脚本
    - 如果设置不正确，点击编辑
+
+2. **新的解决方案**
+   - 我已经创建了一个专门的启动脚本 `backend/start.js`
+   - 这个脚本会正确启动 TypeScript 开发服务器
+   - railway.toml 已更新为使用 `node start.js` 作为启动命令
+
+3. **关键配置要点**
+   - Root Directory 设置为 `./backend/` 让 Railway 只处理后端代码
+   - Start Command 使用 `node start.js` 而不是 `npm start`
+   - 这样 Railway 就能找到明确的启动文件
 
 2. **配置环境变量**
    - 点击 "Variables" 标签
@@ -216,6 +229,38 @@ https://ai-fortune-website-production-xxxx.railway.app/health
 3. **重新部署**
    - 在项目页面点击 "Redeploy"
    - 或推送新的代码更改自动触发部署
+
+### 如果出现 "Error creating build plan with railpack" 错误：
+1. **等待自动重试**
+   - Railway 通常会在几分钟后自动重试
+   - 刷新页面查看状态变化
+
+2. **手动重新部署**
+   - 在项目页面点击 "Redeploy" 按钮
+   - 或删除 Railway 项目后重新创建（不是删除 GitHub 项目）
+
+3. **检查项目配置**
+   - 确认 railway.toml 文件存在且配置正确
+   - 检查 package.json 中的脚本命令
+   - **特别注意**：如果出现 "⚠ Script start.sh not found" 错误，说明 railway.toml 配置不正确
+
+4. **清理缓存后重试**
+   - 在 Railway 项目设置中清理构建缓存
+   - 重新触发部署
+
+### 如果出现 "⚠ Script start.sh not found" 错误：
+1. **检查 railway.toml 配置**
+   - 确保 railway.toml 文件在项目根目录
+   - 配置应该指向后端目录：`startCommand = "cd backend && npm start"`
+   - 确保后端 package.json 中有正确的 start 脚本
+
+2. **重新提交配置**
+   - 修改 railway.toml 后重新提交到 GitHub
+   - 推送到 GitHub 后 Railway 会自动检测配置变化
+
+3. **重新连接仓库**
+   - 删除 Railway 项目
+   - 重新创建 Railway 项目连接 GitHub 仓库
 
 ### 如果API调用失败：
 1. **检查环境变量**
