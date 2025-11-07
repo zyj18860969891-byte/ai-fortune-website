@@ -34,13 +34,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 处理
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: `Route ${req.originalUrl} not found`
-  });
-});
+
 
 // 错误处理
 app.use((err, req, res, next) => {
