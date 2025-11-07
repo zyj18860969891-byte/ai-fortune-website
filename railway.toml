@@ -11,5 +11,7 @@ NODE_ENV = "production"
 PORT = "3001"
 
 [build.nixpacks]
-buildCommand = "npm install --production"
+buildCommand = "npm install"
 buildSetupCommand = "npm run build"
+buildOutputDirectory = "./dist"
+disableDefaultBuildScript = true
