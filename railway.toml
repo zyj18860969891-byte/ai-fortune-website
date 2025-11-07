@@ -2,10 +2,13 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd backend && npm install && npm run build && node start.js"
+startCommand = "cd backend && npm install && npx tsc && node dist/server.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
 [environments.production]
 NODE_ENV = "production"
 PORT = "3001"
+
+[build.nixpacks]
+buildCommand = "cd backend && npm install && npx tsc"
