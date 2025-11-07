@@ -2,18 +2,10 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd backend && npm run build && npm start"
+startCommand = "node start.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-
-[[services]]
-name = "ai-fortune-backend"
 
 [environments.production]
 NODE_ENV = "production"
 PORT = "3001"
-
-[build.nixpacks.meta]
-name = "ai-fortune-backend"
-includeFiles = ["backend/"]
-buildCommand = "cd backend && npm install && npm run build"
