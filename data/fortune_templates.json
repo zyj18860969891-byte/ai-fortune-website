@@ -1,0 +1,88 @@
+{
+  "tarot": {
+    "opening": "🔮 塔罗牌的神秘力量正在为你揭示答案...",
+    "keywords": ["命运", "选择", "转机", "启示", "指引"],
+    "structures": [
+      {
+        "phase": "current",
+        "title": "当前状况",
+        "description": "你现在的处境和内心的真实状态"
+      },
+      {
+        "phase": "challenge",
+        "title": "挑战阻碍",
+        "description": "你需要面对的困难或内心的阻碍"
+      },
+      {
+        "phase": "future",
+        "title": "未来发展",
+        "description": "如果保持现状事情会如何发展"
+      },
+      {
+        "phase": "advice",
+        "title": "建议指导",
+        "description": "你应该采取的行动和态度"
+      }
+    ]
+  },
+  "bazi": {
+    "opening": "📜 八字命理显示你的五行运势...",
+    "keywords": ["五行", "命理", "运势", "吉凶", "宜忌"],
+    "elements": ["金", "木", "水", "火", "土"],
+    "aspects": [
+      {
+        "name": "事业运势",
+        "description": "工作发展和财运状况"
+      },
+      {
+        "name": "感情婚姻",
+        "description": "感情生活和婚姻状况"
+      },
+      {
+        "name": "健康状况",
+        "description": "身体健康需要注意的方面"
+      },
+      {
+        "name": "开运建议",
+        "description": "提升运势的具体建议"
+      }
+    ]
+  },
+  "astrology": {
+    "opening": "⭐ 星座能量正在为你编织命运...",
+    "keywords": ["星象", "能量", "行星", "宇宙", "相位"],
+    "planets": ["太阳", "月亮", "水星", "金星", "火星", "木星", "土星"],
+    "phases": [
+      {
+        "name": "当前星象影响",
+        "description": "宇宙能量对你当前状态的影响"
+      },
+      {
+        "name": "重要时间节点",
+        "description": "近期需要注意的关键时间"
+      },
+      {
+        "name": "能量指导",
+        "description": "如何运用宇宙能量改善生活"
+      }
+    ]
+  },
+  "numerology": {
+    "opening": "🔢 数字密码正在为你解读命运...",
+    "keywords": ["数字", "能量", "振动", "频率", "共振"],
+    "aspects": [
+      {
+        "name": "生命数字解读",
+        "description": "你的核心数字所代表的特质"
+      },
+      {
+        "name": "能量振动",
+        "description": "你目前的能量频率状态"
+      },
+      {
+        "name": "机遇挑战",
+        "description": "近期可能遇到的机遇和挑战"
+      }
+    ]
+  }
+}

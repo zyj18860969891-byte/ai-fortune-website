@@ -1,0 +1,892 @@
+import axios from 'axios';
+import * as fs from 'fs';
+import * as path from 'path';
+
+export interface RealModelScopeConfig {
+  apiKey: string;
+  modelId: string;
+  baseUrl: string;
+  serviceType?: 'modelscope' | 'openai';
+  openaiApiKey?: string;
+  openaiModel?: string;
+}
+
+export interface FortuneAnalysisResult {
+  success: boolean;
+  prediction: string;
+  advice: string;
+  luckyElements: string[];
+  confidence: number;
+  source: string;
+  apiStatus: string;
+  processingTime: number;
+  personality?: any;
+}
+
+export class RealModelScopeOnlineService {
+  private config: RealModelScopeConfig;
+  private conversationHistory: Array<{question: string; response: string}> = [];
+
+  constructor(config: RealModelScopeConfig) {
+    this.config = config;
+    console.log('🎯 RealModelScopeOnlineService 初始化完成');
+    console.log('📡 配置信息:', {
+      baseUrl: this.config.baseUrl,
+      modelId: this.config.modelId,
+      apiKeyPrefix: this.config.apiKey.substring(0, 10) + '...'
+    });
+  }
+
+  /**
+   * 生成拟人化的命理分析
+   */
+  async generateFortune(question: string, context?: string, type?: string, systemPrompt?: string): Promise<FortuneAnalysisResult> {
+    const startTime = Date.now();
+    
+    try {
+      console.log('🎯 RealModelScopeOnlineService.generateFortune() 开始处理');
+      console.log('📝 问题:', question);
+      console.log('📋 上下文:', context);
+      console.log('🎭 类型:', type);
+      console.log('🧠 系统提示:', systemPrompt);
+
+      // 根据问题类型调整回复风格
+      const styleConfig = this.getReplyStyleConfig(type, question);
+
+      // 构建拟人化的AI提示
+      const prompt = this.buildIntelligentPrompt(question, context, systemPrompt);
+
+      console.log('🧠 调用真正的ModelScope AI进行智能分析...');
+      
+      // 调用ModelScope官方API
+      const apiResult = await this.callModelScopeAPI(prompt);
+      
+      const processingTime = Date.now() - startTime;
+      
+      // 处理AI回复，增加拟人化元素
+      const formattedResponse = this.formatHumanLikeResponse(apiResult, question, styleConfig);
+      
+      console.log('✅ 真正的ModelScope AI分析完成', {
+        success: true,
+        confidence: formattedResponse.confidence,
+        processingTime: `${processingTime}ms`
+      });
+
+      // 存储对话历史
+      this.conversationHistory.push({
+        question,
+        response: formattedResponse.prediction
+      });
+
+      return {
+        success: true,
+        prediction: formattedResponse.prediction,
+        advice: formattedResponse.advice,
+        luckyElements: formattedResponse.luckyElements,
+        confidence: formattedResponse.confidence,
+        source: 'real-modelscope-ai-human-like',
+        apiStatus: 'success',
+        processingTime: processingTime,
+        personality: {
+          name: '慧心老师',
+          style: styleConfig.style,
+          tone: styleConfig.tone
+        }
+      };
+
+    } catch (error: any) {
+      const processingTime = Date.now() - startTime;
+      console.error('❌ 拟人化分析失败:', error.message);
+      
+      // 生成降级的拟人化回复
+      const fallbackResponse = this.generateHumanLikeFallback(question, type);
+      
+      return {
+        success: false,
+        prediction: fallbackResponse.prediction,
+        advice: fallbackResponse.advice,
+        luckyElements: fallbackResponse.luckyElements,
+        confidence: fallbackResponse.confidence,
+        source: 'real-modelscope-error',
+        apiStatus: `API调用失败: ${error.message}`,
+        processingTime: processingTime
+      };
+    }
+  }
+
+  /**
+   * 格式化AI回复，增加拟人化元素
+   */
+  private formatHumanLikeResponse(aiResponse: string, question: string, styleConfig: any): any {
+    try {
+      // 清理AI回复
+      let cleanResponse = aiResponse.trim().replace(/^["']|["']$/g, '');
+      
+      // 过滤思考过程和分析步骤
+      cleanResponse = this.filterThinkingProcess(cleanResponse);
+      
+      // 添加拟人化元素
+      const personalityElements = this.addPersonalityElements(cleanResponse, question, styleConfig);
+      
+      return {
+        prediction: personalityElements.mainResponse,
+        confidence: 0.92,
+        advice: personalityElements.advice,
+        luckyElements: personalityElements.luckyElements,
+        emotion: personalityElements.emotion
+      };
+      
+    } catch (error: any) {
+      console.error('❌ 格式化拟人化回复失败:', error);
+      return this.generateBasicResponse(question);
+    }
+  }
+
+  /**
+   * 添加个性元素到回复中
+   */
+  private addPersonalityElements(analysis: any, question: string, styleConfig: any) {
+    const personalities = {
+      wealth: {
+        opening: '🤔 朋友，问财运啊，让我仔细看看您的命盘...',
+        emotion: 'confident',
+        closing: '记得我刚才说的话，财运就在转角处等着您呢！😊'
+      },
+      love: {
+        opening: '😊 小伙伴，感情问题是吧，我来帮您看看缘分如何...',
+        emotion: 'gentle',
+        closing: '相信我的判断，您的真命天子/天女就在不远的将来！💕'
+      },
+      career: {
+        opening: '💼 关于事业，我眼中看到了很多可能性...',
+        emotion: 'determined',
+        closing: '记住，时机成熟时勇敢出击，您一定能在职场上发光发热！🚀'
+      },
+      health: {
+        opening: '🏥 健康是人生的根本，让我来关心一下您的身体状况...',
+        emotion: 'caring',
+        closing: '记住我说的这些建议，健康就是最大的财富！💪'
+      },
+      general: {
+        opening: '👋 您好，我看到您的问题了，让我来为您详细分析一下...',
+        emotion: 'wise',
+        closing: '愿您的人生路越走越宽，有任何问题随时来找我聊！🌟'
+      }
+    };
+    
+    const questionType = styleConfig?.focus || 'general';
+    const personality = personalities[questionType as keyof typeof personalities] || personalities.general;
+    
+    return {
+      mainResponse: `${personality.opening}\n\n${analysis}\n\n${personality.closing}`,
+      advice: '保持积极心态，顺势而为',
+      luckyElements: ['绿色', '蓝色', '3', '8'],
+      emotion: personality.emotion
+    };
+  }
+
+  /**
+   * 过滤AI回复中的思考过程和内部分析 - 强化版本
+   */
+  private filterThinkingProcess(response: string): string {
+    console.log('🔍 开始过滤思考过程，原始内容长度:', response.length);
+    
+    let cleaned = response;
+    
+    // 如果响应过长，尝试提取有效内容而不是直接使用降级内容
+    if (response.length > 800) {
+      // 尝试从长文本中提取有效内容
+      const extractedContent = this.extractContentFromLongResponse(response);
+      if (extractedContent) {
+        cleaned = extractedContent;
+        console.log('✅ 从长文本中提取了分析内容');
+      } else {
+        console.log('⚠️ 响应过长且无法提取有效内容，使用清洁降级内容');
+        return this.generateCleanFallback(response);
+      }
+    }
+    
+    // 1. 移除所有技术性分析段落
+    const removePatterns = [
+      /^[0-9]+\.\s*\*\*拆解请求\*\*[\s\S]*?(?=^[0-9]+\.|🌟|�|⚠️|💡|�👋)/gm,
+      /^[0-9]+\.\s*\*\*分析用户输入\*\*[\s\S]*?(?=^[0-9]+\.|🌟|�|⚠️|💡|�👋)/gm,
+      /\*\*角色\*\*[\s\S]*?(?=\*\*核心要求\*\*|\*\*角色特征\*\*|👋|🌟)/g,
+      /\*\*核心要求\*\*[\s\S]*?(?=\*\*角色特征\*\*|👋|🌟|💪|⚠️|💡)/g,
+      /\*\*角色特征\*\*[\s\S]*?(?=\*\*沟通风格\*\*|👋|🌟|💪|⚠️|💡)/g,
+      /\*\*沟通风格\*\*[\s\S]*?(?=\*\*回答要求\*\*|👋|🌟|💪|⚠️|💡)/g,
+      /\*\*回答要求\*\*[\s\S]*?(?=\*\*用户输入\*\*|👋|🌟|💪|⚠️|💡)/g,
+      /^\d+\.\s+[角色|核心要求|角色特征|沟通风格|回答要求][:：][\s\S]*?(?=^\d+\.|🌟|💪|⚠️|💡|👋)/gm,
+      /^\*\*[^*]*\*\*[:：][\s\S]*?(?=\*\*[^*]*\*\*|🌟|💪|⚠️|💡|👋)/gm,
+      /^\*[^*]*\*[:：][\s\S]*?(?=\*\*[^*]*\*\*|🌟|💪|⚠️|💡|👋)/gm
+    ];
+    
+    for (const pattern of removePatterns) {
+      cleaned = cleaned.replace(pattern, '');
+    }
+    
+    // 2. 移除所有包含技术词汇的行
+    cleaned = cleaned.replace(/^[^*]*（内部，不展示）[^*]*$/gm, '');
+    cleaned = cleaned.replace(/^[^*]*心算或快速查询[^*]*$/gm, '');
+    cleaned = cleaned.replace(/^[^*]*我需要[^*]*$/gm, '');
+    cleaned = cleaned.replace(/^[^*]*快速查询显示[^*]*$/gm, '');
+    cleaned = cleaned.replace(/^[^*]*快速查询[^*]*$/gm, '');
+    
+    // 3. 移除所有列表项的开始
+    cleaned = cleaned.replace(/^\s*\*\s+/gm, '');
+    cleaned = cleaned.replace(/^\s*\-\s+/gm, '');
+    cleaned = cleaned.replace(/^\d+\.\s+/gm, '');
+    
+    // 4. 如果剩余内容仍然包含思考标记，使用备用内容
+    const thinkingMarkers = ['拆解请求', '核心要求', '角色特征', '分析过程', '内部推理'];
+    const hasThinking = thinkingMarkers.some(marker => cleaned.includes(marker));
+    
+    if (hasThinking || cleaned.length > 600) {
+      console.log('⚠️ 仍然包含思考内容，使用备用内容');
+      return this.generateCleanFallback(response);
+    }
+
+    /**
+     * 从长响应中提取有效内容
+     */
+    private extractContentFromLongResponse(response: string): string | null {
+      console.log('🔍 尝试从长响应中提取有效内容...');
+      
+      // 查找是否有格式化的分析内容
+      const formatMatch = response.match(/👋[^🌟💪⚠️💡]*(🌟[^💪]*💪[^⚠️]*⚠️[^💡]*💡[^🌸]*🌸.*?🌟)/s);
+      if (formatMatch) {
+        console.log('✅ 找到格式化内容');
+        return formatMatch[0];
+      }
+
+      // 尝试提取最后的总结段落
+      const conclusionMatch = response.match(/(\*\*整体分析\*\*[\s\S]*|$)/);
+      if (conclusionMatch && conclusionMatch[0].length > 200) {
+        const analysisPart = conclusionMatch[0].replace(/\*\*整体分析\*\*[:：]/, '');
+        if (analysisPart.length > 100) {
+          console.log('✅ 从分析结论中提取内容');
+          return this.formatExtractedAnalysis(analysisPart);
+        }
+      }
+
+      // 尝试从AI的分析内容中提取有用信息
+      const usefulInfo = this.extractUsefulInfoFromResponse(response);
+      if (usefulInfo) {
+        console.log('✅ 从分析内容中提取了有用信息');
+        return this.formatExtractedAnalysis(usefulInfo);
+      }
+
+      return null;
+    }
+
+    /**
+     * 从响应中提取有用信息
+     */
+    private extractUsefulInfoFromResponse(response: string): string {
+      // 提取星座信息
+      const zodiacMatch = response.match(/\*\*星座（占星学）：\*\*[\s\S]*?(?=\*\*|$)/);
+      if (zodiacMatch) {
+        return zodiacMatch[0];
+      }
+
+      // 提取生肖信息
+      const chineseZodiacMatch = response.match(/\*\*中国生肖（八字\/生肖）：\*\*[\s\S]*?(?=\*\*|$)/);
+      if (chineseZodiacMatch) {
+        return chineseZodiacMatch[0];
+      }
+
+      // 提取数字命理信息
+      const numerologyMatch = response.match(/\*\*数字命理：\*\*[\s\S]*?(?=\*\*|$)/);
+      if (numerologyMatch) {
+        return numerologyMatch[0];
+      }
+
+      // 提取八字信息
+      const baziMatch = response.match(/\*\*八字（四柱命理）- 简化版：\*\*[\s\S]*?(?=\*\*|$)/);
+      if (baziMatch) {
+        return baziMatch[0];
+      }
+
+      // 如果没有找到特定信息，提取最后的分析部分
+      const analysisMatch = response.match(/(\*\*将分析结果整合为所需格式\*\*[\s\S]*|$)/);
+      if (analysisMatch && analysisMatch[0].length > 100) {
+        return analysisMatch[0];
+      }
+
+      return '';
+    }
+    
+    // 5. 清理多余的空行和格式
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+    
+    // 6. 确保以问候语开头
+    if (!cleaned.startsWith('👋') && !cleaned.startsWith('😊') && !cleaned.startsWith('🤔')) {
+      cleaned = '👋 您好，朋友！让我来为您详细分析一下...\n\n' + cleaned;
+    }
+    
+    console.log('✅ 过滤思考过程完成:', {
+      '原文长度': response.length,
+      '过滤后长度': cleaned.length,
+      '减少字符数': response.length - cleaned.length
+    });
+
+    return cleaned;
+  }
+
+  /**
+   * 生成清洁的降级内容
+   */
+  private generateCleanFallback(originalResponse: string): string {
+    // 尝试从原文中提取有用的信息片段
+    const extractedInfo = this.extractUsefulInfo(originalResponse);
+    
+    if (extractedInfo) {
+      return `👋 您好，朋友！让我来为您详细分析一下...
+
+🌟 性格特点
+${extractedInfo.personality || '您是一个很有个性的人，性格温和而坚定。'}
+
+💪 人生优势
+${extractedInfo.advantages || '您拥有很强的适应能力和坚韧不拔的意志。'}
+
+⚠️ 注意事项
+${extractedInfo.notes || '在处理重要决定时，建议多听取他人意见。'}
+
+💡 实用建议
+${extractedInfo.suggestions || '保持积极心态，相信自己的判断力。'}
+
+🌸 温馨祝福
+愿您的人生路越走越宽，有任何问题随时来找我聊！🌟`;
+    }
+    
+    // 如果无法提取有用信息，返回标准格式
+    return `👋 您好，朋友！让我来为您详细分析一下...
+
+🌟 性格特点
+您是一个心地善良、富有智慧的人。您的性格温和而坚定，总是能够以积极的态度面对生活中的各种挑战。
+
+💪 人生优势
+您拥有很强的直觉力和洞察力，能够敏锐地感知事物的本质。同时，您的适应能力很强，能够在变化中保持内心的平静。
+
+⚠️ 注意事项
+在重要决策时，建议多思考一下再做决定，避免冲动行事。也要注意保护自己的身心健康。
+
+💡 实用建议
+保持积极的心态，多与朋友交流，分享您的想法和感受。相信自己的直觉，它会指引您走向正确的方向。
+
+🌸 温馨祝福
+愿您的人生路越走越宽，有任何问题随时来找我聊！🌟`;
+  }
+
+  /**
+   * 从原始响应中提取有用信息
+   */
+  private extractUsefulInfo(response: string): any {
+    const info: any = {};
+    
+    // 尝试提取八字信息
+    if (response.includes('1996')) {
+      info.personality = '您出生在1996年，性格中带有很强的独立性和创新精神。';
+    }
+    
+    // 尝试提取五行信息
+    const wuxing = response.match(/五行[：:]\s*([^\n，,。.]*)/);
+    if (wuxing) {
+      info.advantages = `您的五行属性显示出独特的${wuxing[1]}特征，这为您带来了强大的内在力量。`;
+    }
+    
+    // 尝试提取生肖信息  
+    const zodiac = response.match(/(鼠|牛|虎|兔|龙|蛇|马|羊|猴|鸡|狗|猪)年/);
+    if (zodiac) {
+      info.notes = `作为${zodiac[1]}年出生的人，您需要在团队合作中发挥自己的优势。`;
+    }
+    
+    return Object.keys(info).length > 0 ? info : null;
+  }
+
+  /**
+   * 生成基础回复
+   */
+  private generateBasicResponse(question: string): any {
+    return {
+      prediction: `关于您询问的"${question}"，根据我多年的经验，我认为这是一个很好的问题。让我来为您详细分析一下您的具体情况，并给出一些实用的建议。\n\n😊 希望我的分析能对您有所帮助！`,
+      confidence: 0.8,
+      advice: '保持积极心态，灵活应对生活中的变化。',
+      luckyElements: ['绿色', '蓝色', '3', '8'],
+      emotion: 'wise'
+    };
+  }
+
+  /**
+   * 生成降级的拟人化回复
+   */
+  private generateHumanLikeFallback(question: string, type?: string): any {
+    const fallbackResponses = {
+      wealth: '朋友，关于财运，我看出您的命盘中确实有机会，但要耐心等待时机。😊',
+      love: '小伙伴，感情方面需要您主动一些，有时候缘分就在您身边。💕',
+      career: '关于事业，我相信您有很好的能力，只是需要找对方向。💪',
+      health: '健康是最重要的，建议您多注意作息规律。🌿',
+      general: '朋友，让我根据您的问题来给出一些建议吧。✨'
+    };
+    
+    const keyType = (type as keyof typeof fallbackResponses) || 'general';
+    const response = fallbackResponses[keyType as keyof typeof fallbackResponses] || fallbackResponses.general;
+    
+    return {
+      prediction: `${response}\n\n请相信我的直觉，虽然这次分析可能不够详细，但核心的建议是准确的。`,
+      confidence: 0.75,
+      advice: '保持积极心态，随时准备把握机会。',
+      luckyElements: ['绿色', '蓝色', '3', '8']
+    };
+  }
+
+  /**
+   * 调用ModelScope官方API
+   */
+  private async callModelScopeAPI(prompt: string): Promise<string> {
+    const requestPayload = {
+      model: this.config.modelId,
+      messages: [
+        {
+          role: 'system',
+          content: '你是一位专业的AI算命师，精通塔罗牌、八字命理、星座占星和数字命理。你的回答应该温暖、智慧、富有洞察力。'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 800,
+      top_p: 0.9,
+      frequency_penalty: 0.3,
+      presence_penalty: 0.2
+    };
+
+    console.log('📤 发送ModelScope API请求...');
+    console.log('🔗 API URL:', `${this.config.baseUrl}/chat/completions`);
+
+      const response = await axios.post(
+      `${this.config.baseUrl}/chat/completions`,
+      requestPayload,
+      {
+        headers: {
+          'Authorization': `Bearer ${this.config.apiKey}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 30000 // 30秒超时
+      }
+    );
+    
+    console.log('📥 ModelScope API响应状态:', response.status);
+    console.log('🔍 ModelScope API响应内容:', JSON.stringify(response.data, null, 2));
+    
+    // 提取AI生成的文本 - 兼容GLM-4.6和Qwen格式
+    const choice = response.data.choices?.[0]?.message;
+    const generatedText = choice?.content || 
+                         choice?.reasoning_content || 
+                         response.data.output?.text || 
+                         response.data.output || 
+                         '';
+
+    if (!generatedText) {
+      console.error('❌ 完整响应结构:', JSON.stringify(response.data, null, 2));
+      throw new Error('ModelScope API返回空响应');
+    }
+
+    console.log('📊 生成的文本长度:', generatedText.length, '字符');
+    console.log('💬 AI实际生成的内容:', generatedText);
+    return generatedText;
+  }
+
+  /**
+   * 构建拟人化的专业命理师对话提示
+   */
+  private buildIntelligentPrompt(question: string, context?: string, customSystemPrompt?: string): string {
+    // 检测算命类型
+    const fortuneType = this.detectFortuneType(question);
+    
+    // 优化上下文，避免过长历史影响AI理解
+    const cleanContext = this.optimizeContext(context);
+    
+    // 使用自定义系统提示或默认提示
+    const systemPrompt = customSystemPrompt || `你是一位拥有30年从业经验的专业命理师，名字叫"慧心"，精通八字、紫微斗数、奇门遁甲。
+
+🎯 核心要求：
+- **绝对不要**显示任何思考过程、分析步骤或推理过程
+- **绝对不要**使用"让我想想"、"我需要分析"、"根据我的分析"等开头
+- **绝对不要**包含内部推理语言，如"考虑到..."、"从...来看"等
+- 直接给出最终结论和建议，不要解释分析过程
+
+🎭 角色特征：
+- 温和亲切，像一位智慧的长者
+- 用词自然，不做作，不刻板
+- 有同理心，能理解用户的困惑和担忧
+- 语言风格：温暖、专业、幽默、富有生活感悟
+
+💬 沟通风格：
+- 开头用称呼如"朋友"、"小伙伴"、"您"
+- 会说"根据我多年的经验..."、"我看出..."、"您的命盘很有趣"
+- 用"我觉得..."、"您可以尝试..."、"相信我的直觉..."
+- 会给出实用建议，比如"今天可以..."、"最近建议您..."
+
+📊 回答要求：
+1. **直接输出最终结果，不要分析过程**
+2. 每次回答都要有个性化的开头
+3. 中间用自然语言描述结论，不解释推理
+4. 结尾有温馨的鼓励和建议
+5. 保持200-400字左右，简洁但丰富
+6. 多用"😊"、"🤔"等emoji增加亲和力
+7. **不要使用markdown格式符号（如*、#、-等）**
+8. **重点突出性格特点和运势建议**
+9. **避免过于技术性的术语，用通俗语言解释**
+
+当前时间：${new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' })}
+身份：资深命理师"慧心"`;
+
+    let userPrompt = `💬 用户问题：${question}`;
+
+    if (cleanContext && cleanContext.trim()) {
+      const recentContext = cleanContext.slice(-200);
+      userPrompt += `\n\n📋 之前的对话背景：\n${recentContext}`;
+    }
+
+    userPrompt += `\n\n🎭 请以命理师"慧心"的身份，用温暖亲切的语气回答用户的问题。`;
+
+    return `你是一位专业的命理师，名字叫"慧心"。请直接给出分析结果，不要显示任何思考过程、分析步骤或推理内容。
+
+用户问题：${question}
+
+直接输出最终分析结果，格式如下：
+
+👋 您好，朋友！让我来为您详细分析一下...
+
+🌟 性格特点
+您是一个性格温和、富有智慧的人，总是能够以积极的态度面对生活中的各种挑战。您的直觉力很强，善于感知事物的本质。
+
+💪 人生优势
+您拥有很强的适应能力和坚韧不拔的意志，同时具有良好的沟通能力和人际关系处理能力。
+
+⚠️ 注意事项
+在重要决策时，建议多思考一下再做决定，避免冲动行事。也要注意保护自己的身心健康。
+
+💡 实用建议
+保持积极的心态，多与朋友交流分享您的想法。相信自己的直觉，它会指引您走向正确的方向。
+
+🌸 温馨祝福
+愿您的人生路越走越宽，有任何问题随时来找我聊！🌟
+
+记住：绝对不要显示思考过程，直接输出最终结果。`;
+  }
+
+  /**
+   * 获取回复风格配置
+   */
+  private getReplyStyleConfig(type?: string, question?: string) {
+    const questionStr = question?.toLowerCase() || '';
+    
+    // 根据问题内容选择风格
+    const styleMap: { [key: string]: any } = {
+      'bazi': { style: 'bazi-expert', tone: 'wise', approach: 'traditional' },
+      'tarot': { style: 'mystical', tone: 'gentle', approach: 'intuitive' },
+      'astrology': { style: 'cosmic', tone: 'profound', approach: 'celestial' },
+      'numerology': { style: 'mathematical', tone: 'precise', approach: 'numerical' }
+    };
+    
+    // 根据关键词匹配
+    let config = styleMap[type || 'bazi'] || styleMap['bazi'];
+    
+    if (questionStr.includes('财运') || questionStr.includes('收入') || questionStr.includes('钱')) {
+      config = { ...config, focus: 'wealth', emotion: 'encouraging' };
+    } else if (questionStr.includes('感情') || questionStr.includes('爱情') || questionStr.includes('桃花')) {
+      config = { ...config, focus: 'love', emotion: 'gentle' };
+    } else if (questionStr.includes('事业') || questionStr.includes('工作') || questionStr.includes('升职')) {
+      config = { ...config, focus: 'career', emotion: 'confident' };
+    } else if (questionStr.includes('健康') || questionStr.includes('身体') || questionStr.includes('疾病')) {
+      config = { ...config, focus: 'health', emotion: 'caring' };
+    } else {
+      config = { ...config, focus: 'general', emotion: 'wise' };
+    }
+    
+    return {
+      ...config,
+      confidence: 0.92,
+      personality: 'warm-professional'
+    };
+  }
+
+  /**
+   * 优化上下文长度，避免过长历史
+   */
+  private optimizeContext(context?: string): string {
+    if (!context || typeof context !== 'string') {
+      return '';
+    }
+
+    // 限制上下文长度
+    const maxLength = 500;
+    
+    if (context.length <= maxLength) {
+      return context;
+    }
+
+    // 提取最近的对话内容
+    const recentContext = context.slice(-maxLength);
+    
+    // 清理格式
+    return recentContext
+      .replace(/\n{3,}/g, '\n\n')  // 减少换行
+      .trim();
+  }
+
+  /**
+   * 检测算命类型
+   */
+  private detectFortuneType(question: string): 'tarot' | 'bazi' | 'astrology' | 'numerology' | 'general' {
+    const lowerQuestion = question.toLowerCase();
+    
+    if (lowerQuestion.includes('塔罗') || lowerQuestion.includes('牌') || 
+        lowerQuestion.includes('tarot') || lowerQuestion.includes('占卜')) {
+      return 'tarot';
+    }
+    
+    if (lowerQuestion.includes('八字') || lowerQuestion.includes('五行') || 
+        lowerQuestion.includes('天干') || lowerQuestion.includes('地支') || 
+        lowerQuestion.includes('命理') || lowerQuestion.includes('运势')) {
+      return 'bazi';
+    }
+    
+    if (lowerQuestion.includes('星座') || lowerQuestion.includes('占星') || 
+        lowerQuestion.includes('星象') || lowerQuestion.includes('astrology') ||
+        lowerQuestion.includes('行星') || lowerQuestion.includes('宫位')) {
+      return 'astrology';
+    }
+    
+    if (lowerQuestion.includes('数字') || lowerQuestion.includes('numerology') ||
+        lowerQuestion.includes('生命数字') || lowerQuestion.includes('数字命理')) {
+      return 'numerology';
+    }
+    
+    return 'general';
+  }
+
+  /**
+   * 解析AI响应
+   */
+  private parseAIResponse(aiResponse: string, originalQuestion: string): Omit<FortuneAnalysisResult, 'processingTime'> {
+    try {
+      // 提取主要预测内容
+      const prediction = this.extractMainContent(aiResponse);
+      
+      // 提取建议内容
+      const advice = this.extractAdvice(aiResponse);
+      
+      // 提取幸运元素
+      const luckyElements = this.extractLuckyElements(aiResponse);
+      
+      // 计算置信度（基于响应的完整性和专业性）
+      const confidence = this.calculateConfidence(aiResponse, prediction);
+
+      return {
+        success: true,
+        prediction,
+        advice,
+        luckyElements,
+        confidence,
+        source: 'real-modelscope-ai',
+        apiStatus: 'success'
+      };
+    } catch (error: any) {
+      console.error('解析AI响应失败:', error.message);
+      
+      return {
+        success: false,
+        prediction: aiResponse || '无法解析AI响应内容',
+        advice: '建议稍后重试或联系技术支持',
+        luckyElements: ['金色', '8', '中心'],
+        confidence: 0.3,
+        source: 'real-modelscope-parse-error',
+        apiStatus: 'response-parsing-error'
+      };
+    }
+  }
+
+  /**
+   * 提取主要内容
+   */
+  private extractMainContent(text: string): string {
+    // 按行分割并提取前几段有意义的内容
+    const lines = text.split('\n').filter(line => line.trim().length > 5);
+    
+    // 提取前3-4段作为主要内容
+    const mainContent = lines.slice(0, 4).join('\n\n');
+    
+    return mainContent || text.substring(0, 300);
+  }
+
+  /**
+   * 提取建议内容
+   */
+  private extractAdvice(text: string): string {
+    const adviceKeywords = ['建议', '指导', '应该', '需要', '可以', '推荐', 'Action', 'Tips'];
+    const lines = text.split('\n');
+    
+    for (const line of lines) {
+      if (adviceKeywords.some(keyword => line.includes(keyword))) {
+        return line.trim();
+      }
+    }
+    
+    // 如果没有明确建议，提取最后一段作为建议
+    const lastMeaningfulLine = lines.filter(line => line.trim().length > 10).pop();
+    return lastMeaningfulLine || '保持积极心态，相信自己的判断力。';
+  }
+
+  /**
+   * 提取幸运元素
+   */
+  private extractLuckyElements(text: string): string[] {
+    const elements: string[] = [];
+    
+    // 提取颜色
+    const colors = text.match(/(红色|蓝色|绿色|黄色|紫色|金色|银色|黑色|白色|橙色|粉色|棕色)/g);
+    if (colors) elements.push(...colors.slice(0, 2));
+    
+    // 提取数字
+    const numbers = text.match(/([1-9]|10|11|12|13)/g);
+    if (numbers) elements.push(...numbers.slice(0, 2));
+    
+    // 提取方向
+    const directions = text.match(/(东方|南方|西方|北方|东|南|西|北|中心)/g);
+    if (directions) elements.push(...directions.slice(0, 1));
+    
+    // 如果没有提取到，返回默认值
+    if (elements.length === 0) {
+      return ['蓝色', '7', '东方'];
+    }
+    
+    return [...new Set(elements)]; // 去重
+  }
+
+  /**
+   * 计算置信度
+   */
+  private calculateConfidence(aiResponse: string, prediction: string): number {
+    let confidence = 0.6; // 基础置信度
+    
+    // 根据响应长度调整置信度
+    if (aiResponse.length > 200) confidence += 0.1;
+    if (aiResponse.length > 500) confidence += 0.1;
+    if (aiResponse.length > 800) confidence += 0.1;
+    
+    // 根据预测内容的完整性调整置信度
+    if (prediction.includes('建议') || prediction.includes('分析')) confidence += 0.1;
+    if (prediction.length > 100) confidence += 0.1;
+    
+    // 确保置信度在合理范围内
+    return Math.min(Math.max(confidence, 0.3), 0.95);
+  }
+
+  /**
+   * 获取备用预测
+   */
+  private getFallbackPrediction(errorMessage: string): string {
+    return `🤖 AI分析暂时不可用 (${errorMessage})。这是一个基于规则的备用响应。请稍后再试或联系技术支持。`;
+  }
+
+  /**
+   * 健康检查
+   */
+  async healthCheck(): Promise<{
+    healthy: boolean;
+    service: string;
+    timestamp: string;
+    uptime: number;
+    apiStatus: string;
+  }> {
+    const startTime = Date.now();
+    
+    try {
+      // 简单的API连通性测试
+      const testPrompt = '你好';
+      await this.callModelScopeAPI(testPrompt);
+      
+      const responseTime = Date.now() - startTime;
+      
+      return {
+        healthy: true,
+        service: 'RealModelScopeOnlineService',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        apiStatus: `connected (${responseTime}ms)`
+      };
+    } catch (error: any) {
+      return {
+        healthy: false,
+        service: 'RealModelScopeOnlineService',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        apiStatus: `disconnected: ${error.message}`
+      };
+    }
+  }
+
+  /**
+   * 获取服务状态
+   */
+  async getServiceStatus(): Promise<{
+    status: string;
+    service: string;
+    version: string;
+    config: {
+      modelId: string;
+      baseUrl: string;
+      hasApiKey: boolean;
+    };
+    statistics: {
+      totalRequests: number;
+      conversationHistory: number;
+    };
+    capabilities: string[];
+  }> {
+    return {
+      status: 'active',
+      service: 'RealModelScopeOnlineService',
+      version: '3.0.0',
+      config: {
+        modelId: this.config.modelId,
+        baseUrl: this.config.baseUrl,
+        hasApiKey: !!this.config.apiKey
+      },
+      statistics: {
+        totalRequests: this.conversationHistory.length,
+        conversationHistory: this.conversationHistory.length
+      },
+      capabilities: [
+        '智能算命分析',
+        '多类型算命支持',
+        '实时API调用',
+        '对话历史记录',
+        '健康检查',
+        '错误恢复'
+      ]
+    };
+  }
+
+  /**
+   * 获取对话历史
+   */
+  getConversationHistory(): Array<{question: string; response: string}> {
+    return [...this.conversationHistory];
+  }
+
+  /**
+   * 清空对话历史
+   */
+  clearHistory(): void {
+    this.conversationHistory = [];
+    console.log('📝 对话历史已清空');
+  }
+}
+
+export default RealModelScopeOnlineService;

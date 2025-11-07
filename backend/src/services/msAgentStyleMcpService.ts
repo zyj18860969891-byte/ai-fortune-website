@@ -1,0 +1,488 @@
+// 基于ms-agent源码分析的正确MCP配置实现
+// 参考：https://github.com/modelscope/ms-agent/blob/main/ms_agent/tools/mcp_client.py
+
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+
+export interface McpServerConfig {
+  type: 'streamable_http';
+  url: string;
+  headers?: Record<string, string>;
+  timeout?: number;
+  sse_read_timeout?: number;
+}
+
+export interface McpConfig {
+  mcpServers: Record<string, McpServerConfig>;
+}
+
+export class MsAgentStyleMcpService {
+  private static instance: MsAgentStyleMcpService;
+  private mcpConfig: McpConfig;
+  private baseUrl: string;
+  private apiKey: string;
+  private timeout: number;
+  private sessions: Map<string, Client> = new Map();
+  private exitStack: any; // 用于管理会话生命周期
+
+  private constructor() {
+    // 读取环境变量配置
+    this.baseUrl = process.env.BAZI_MCP_URL || 'https://mcp.api-inference.modelscope.net/6a57768488dc47/mcp';
+    this.apiKey = process.env.MODELSCOPE_API_KEY || 'ms-bf1291c1-c1ed-464c-b8d8-162fdee96180';
+    this.timeout = parseInt(process.env.BAZI_MCP_TIMEOUT || '15000');
+    
+    // 构建ms-agent风格的MCP配置
+    this.mcpConfig = {
+      mcpServers: {
+        "Bazi-MCP": {
+          type: "streamable_http",
+          url: this.baseUrl,
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'X-ModelScope-Token': this.apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream'
+          },
+          timeout: this.timeout,
+          sse_read_timeout: this.timeout
+        },
+        "Enhance-Prompt-MCP": {
+          type: "streamable_http",
+          url: "https://mcp.api-inference.modelscope.net/6a57768488dc47/mcp",
+          headers: {
+            'Authorization': `Bearer ${this.apiKey}`,
+            'X-ModelScope-Token': this.apiKey,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json, text/event-stream'
+          },
+          timeout: this.timeout,
+          sse_read_timeout: this.timeout
+        }
+      }
+    };
+    
+    console.log('🔮 MsAgentStyleMcpService初始化:', {
+      baseUrl: this.baseUrl,
+      apiKey: this.apiKey.substring(0, 12) + '...',
+      timeout: this.timeout,
+      config: this.mcpConfig
+    });
+  }
+
+  public static getInstance(): MsAgentStyleMcpService {
+    if (!MsAgentStyleMcpService.instance) {
+      MsAgentStyleMcpService.instance = new MsAgentStyleMcpService();
+    }
+    return MsAgentStyleMcpService.instance;
+  }
+
+  /**
+   * 基于Bazi MCP官方文档的MCP工具调用
+   * 参考：https://github.com/cantian-ai/bazi-mcp
+   */
+  public async callTool(serverName: string, toolName: string, toolArgs: any): Promise<any> {
+    try {
+      console.log(`🔮 调用Bazi MCP工具: ${serverName}.${toolName}`, toolArgs);
+      
+      const serverConfig = this.mcpConfig.mcpServers[serverName];
+      if (!serverConfig) {
+        throw new Error(`MCP服务器 ${serverName} 未配置`);
+      }
+
+      // 获取ClientSession（带重试机制）
+      let session: Client | undefined;
+      let retryCount = 0;
+      const maxRetries = 2;
+      
+      while (retryCount <= maxRetries) {
+        try {
+          session = await this.connectToServer(serverName, serverConfig);
+          break;
+        } catch (error: any) {
+          if (retryCount >= maxRetries) {
+            throw error;
+          }
+          retryCount++;
+          console.log(`🔄 第${retryCount}次重试连接:`, error.message);
+          // 清理失败的会话
+          this.sessions.delete(serverName);
+          await new Promise(resolve => setTimeout(resolve, 1000 * retryCount)); // 递增延迟
+        }
+      }
+
+      if (!session) {
+        throw new Error('无法建立MCP连接');
+      }
+
+      console.log('📡 发送Bazi MCP请求:', {
+        method: 'tools/call',
+        tool: toolName,
+        server: serverName,
+        url: serverConfig.url
+      });
+
+      // 使用Client调用工具（ms-agent方式）
+      const response = await session.callTool({ name: toolName, arguments: toolArgs });
+
+      console.log('📊 Bazi MCP响应状态:', response);
+
+      if (!response.isError) {
+        console.log('✅ Bazi MCP工具调用成功');
+        return {
+          success: true,
+          content: Array.isArray(response.content) ? response.content.map((c: any) => c?.text || '').join('\n') : '',
+          data: response
+        };
+      } else {
+        console.error('❌ Bazi MCP工具调用失败:', response.content);
+        return {
+          success: false,
+          error: `工具调用失败: ${Array.isArray(response.content) ? response.content.map((c: any) => c?.text || '').join('\n') : '未知错误'}`
+        };
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Bazi MCP工具调用异常:', error.message);
+      
+      // 检查是否是session过期错误
+      if (error.message.includes('SessionExpired') || error.message.includes('session') && error.message.includes('expired')) {
+        console.log('🔄 检测到session过期，清除现有会话...');
+        this.sessions.delete(serverName);
+      }
+      
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 列出可用工具（参考ms_agent的实现）
+   */
+  public async listTools(serverName: string): Promise<any> {
+    try {
+      console.log(`🔍 列出MCP工具: ${serverName}`);
+      
+      const serverConfig = this.mcpConfig.mcpServers[serverName];
+      if (!serverConfig) {
+        throw new Error(`MCP服务器 ${serverName} 未配置`);
+      }
+
+      const requestBody = {
+        jsonrpc: '2.0',
+        id: Date.now(),
+        method: 'tools/list',
+        params: {}
+      };
+
+      const session = await this.connectToServer(serverName, serverConfig);
+      const response = await session.listTools();
+
+      if (!response.isError) {
+        console.log('✅ 获取工具列表成功:', response.tools.length);
+        return { success: true, tools: response.tools };
+      } else {
+        return { success: false, error: '获取工具列表失败' };
+      }
+    } catch (error: any) {
+      console.error('❌ 获取工具列表失败:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * 连接到MCP服务器并创建Client - 基于ms-agent实现
+   * 参考：ms_agent/tools/mcp_client.py
+   */
+  private async connectToServer(serverName: string, serverConfig: McpServerConfig): Promise<Client> {
+    try {
+      console.log(`📡 [ms-agent] 连接到MCP服务器: ${serverName}`);
+      
+      // 检查是否已有连接
+      if (this.sessions.has(serverName)) {
+        const existingClient = this.sessions.get(serverName);
+        if (existingClient) {
+          console.log('📡 [ms-agent] 使用现有会话');
+          return existingClient;
+        }
+      }
+      
+      // 如果有现有会话但无效，清除它
+      this.sessions.delete(serverName);
+
+      // 使用streamable_http传输方式（ms-agent默认方式）
+      const transport = new StreamableHTTPClientTransport(
+        new URL(serverConfig.url),
+        {
+          requestInit: {
+            headers: serverConfig.headers,
+            signal: AbortSignal.timeout(serverConfig.timeout || 15000)
+          }
+        }
+      );
+
+      // 创建Client
+      const client = new Client(
+        {
+          name: 'ai-fortune-backend',
+          version: '1.0.0'
+        },
+        {
+          capabilities: {}
+        }
+      );
+
+      // 连接传输层
+      await client.connect(transport);
+      console.log('✅ [ms-agent] MCP客户端连接成功');
+
+      // 保存会话
+      this.sessions.set(serverName, client);
+      
+      // 列出可用工具
+      const toolsResult = await client.listTools();
+      console.log(`✅ [ms-agent] 获取到 ${toolsResult.tools.length} 个工具`);
+      
+      return client;
+    } catch (error: any) {
+      console.error('❌ [ms-agent] MCP连接失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 使用streamable_http传输方式发送请求 - 增强日志版本
+   * 基于Bazi MCP实际需求：需要mcp-session-id header
+   */
+  private async sendStreamableHttpRequest(serverConfig: McpServerConfig, requestBody: any, sessionId?: string): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), serverConfig.timeout || 15000);
+
+    try {
+      const headers: Record<string, string> = {
+        ...serverConfig.headers,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json, text/event-stream'
+      };
+
+      // 暂时不使用会话ID，测试是否是会话ID导致的问题
+      let finalSessionId = sessionId;
+      if (sessionId && sessionId !== 'direct-call' && sessionId !== '') {
+        headers['mcp-session-id'] = sessionId;
+        console.log('📡 [ms-agent风格] 使用会话ID:', sessionId);
+      } else {
+        console.log('📡 [ms-agent风格] 跳过会话ID');
+        finalSessionId = 'no-session';
+      }
+
+      console.log('📡 [详细日志] 发送Bazi MCP请求:', {
+        url: serverConfig.url,
+        method: requestBody.method,
+        id: requestBody.id,
+        tool: requestBody.params?.name,
+        headers: Object.keys(headers),
+        sessionId: sessionId,
+        finalSessionId: finalSessionId,
+        mcpSessionId: headers['mcp-session-id'],
+        bodySize: JSON.stringify(requestBody).length,
+        bodyPreview: JSON.stringify(requestBody).substring(0, 200) + '...'
+      });
+
+      const startTime = Date.now();
+      const response = await fetch(serverConfig.url, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestBody),
+        signal: controller.signal
+      });
+      const endTime = Date.now();
+
+      console.log('📡 [详细日志] 请求响应详情:', {
+        status: response.status,
+        statusText: response.statusText,
+        responseTime: `${endTime - startTime}ms`,
+        responseHeaders: Object.fromEntries(response.headers.entries()),
+        contentType: response.headers.get('content-type'),
+        contentLength: response.headers.get('content-length')
+      });
+
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.error('📡 [详细日志] 请求异常:', {
+        error: error.message,
+        errorType: error.name,
+        isTimeout: error.name === 'AbortError',
+        sessionId: sessionId
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * 计算八字 - 使用Bazi MCP工具调用
+   * 根据八字MCP官方文档，工具名称是getBaziDetail
+   * 参考：https://github.com/cantian-ai/bazi-mcp
+   */
+  public async calculateBazi(birthData: any): Promise<any> {
+    try {
+      console.log('🔮 使用Bazi MCP工具计算八字:', birthData);
+      
+      // 根据八字MCP文档准备参数
+      const baziArgs = this.prepareBaziArgs(birthData);
+      
+      // 使用正确的工具名称getBaziDetail
+      const result = await this.callTool('Bazi-MCP', 'getBaziDetail', baziArgs);
+
+      if (result.success) {
+        console.log('✅ Bazi MCP计算成功');
+        // 解析MCP返回的JSON数据
+        let parsedData = result.data;
+        if (typeof parsedData === 'string') {
+          try {
+            parsedData = JSON.parse(parsedData);
+            console.log('📊 解析后的Bazi数据结构:', {
+              hasDayMaster: !!parsedData.日主,
+              dayMaster: parsedData.日主,
+              keys: Object.keys(parsedData)
+            });
+          } catch (e) {
+            console.warn('⚠️ 解析MCP返回数据失败:', e);
+          }
+        }
+        return {
+          success: true,
+          data: parsedData
+        };
+      } else {
+        console.warn('⚠️ Bazi MCP计算失败:', result.error);
+        return result;
+      }
+      
+    } catch (error: any) {
+      console.error('❌ Bazi MCP计算异常:', error.message);
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 准备八字MCP参数格式
+   * 根据官方文档格式要求
+   */
+  private prepareBaziArgs(birthData: any): any {
+    // 如果是ISO格式的阳历时间
+    if (birthData.solarDatetime) {
+      return {
+        solarDatetime: birthData.solarDatetime,
+        gender: birthData.gender || 1, // 1为男，0为女
+        eightCharProviderSect: birthData.eightCharProviderSect || 2
+      };
+    }
+    
+    // 如果是农历时间
+    if (birthData.lunarDatetime) {
+      return {
+        lunarDatetime: birthData.lunarDatetime,
+        gender: birthData.gender || 1,
+        eightCharProviderSect: birthData.eightCharProviderSect || 2
+      };
+    }
+    
+    // 如果是分离的年月日时分
+    if (birthData.year && birthData.month && birthData.day) {
+      // 构建ISO格式的阳历时间
+      const solarDatetime = this.buildSolarDatetime(
+        birthData.year, 
+        birthData.month, 
+        birthData.day, 
+        birthData.hour || 0, 
+        birthData.minute || 0,
+        birthData.timezone || 'Asia/Shanghai'
+      );
+      
+      return {
+        solarDatetime: solarDatetime,
+        gender: birthData.gender === 'female' ? 0 : 1,
+        eightCharProviderSect: birthData.eightCharProviderSect || 2
+      };
+    }
+    
+    // 如果是传统的年月日时格式
+    if (birthData.birthYear && birthData.birthMonth && birthData.birthDay) {
+      const solarDatetime = this.buildSolarDatetime(
+        birthData.birthYear, 
+        birthData.birthMonth, 
+        birthData.birthDay, 
+        birthData.birthHour || 0, 
+        birthData.birthMinute || 0,
+        'Asia/Shanghai'
+      );
+      
+      return {
+        solarDatetime: solarDatetime,
+        gender: birthData.gender === 'female' ? 0 : 1,
+        eightCharProviderSect: 2
+      };
+    }
+    
+    throw new Error('无法解析出生数据格式，请提供有效的年月日时分信息');
+  }
+
+  /**
+   * 构建ISO格式的阳历时间
+   */
+  private buildSolarDatetime(year: number, month: number, day: number, hour: number, minute: number, timezone: string): string {
+    // 构建日期时间字符串，假设为北京时间的阳历时间
+    const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+    
+    // 格式化为ISO格式并添加时区偏移
+    return date.toISOString().replace('Z', '+08:00');
+  }
+
+  /**
+   * 健康检查 - 使用Bazi MCP的tools/list接口
+   */
+  public async healthCheck(): Promise<any> {
+    try {
+      console.log('🔍 Bazi MCP服务健康检查...');
+      
+      const toolsResult = await this.listTools('Bazi-MCP');
+      const healthy = toolsResult.success;
+      
+      console.log(healthy ? '✅ Bazi MCP服务健康' : '❌ Bazi MCP服务异常');
+
+      return {
+        healthy,
+        service: '@cantian-ai/Bazi-MCP (简化版)',
+        endpoint: this.baseUrl,
+        config: this.mcpConfig,
+        status: healthy ? 'healthy' : 'unhealthy',
+        timestamp: new Date().toISOString()
+      };
+      
+    } catch (error: any) {
+      console.error('❌ Bazi MCP健康检查失败:', error.message);
+      return {
+        healthy: false,
+        service: '@cantian-ai/Bazi-MCP (简化版)',
+        endpoint: this.baseUrl,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  /**
+   * 获取MCP配置
+   */
+  public getMcpConfig(): McpConfig {
+    return this.mcpConfig;
+  }
+}
+
+export default MsAgentStyleMcpService;

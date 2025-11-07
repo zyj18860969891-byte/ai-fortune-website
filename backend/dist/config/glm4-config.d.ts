@@ -1,0 +1,1 @@
+//# sourceMappingURL=glm4-config.d.ts.map

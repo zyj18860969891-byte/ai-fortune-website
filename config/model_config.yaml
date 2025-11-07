@@ -1,0 +1,61 @@
+modelscope:
+  api_version: "v1"
+  model_endpoint: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  default_model: "AI-ModelHub/fortune-telling-model"
+  
+  # 模型参数
+  generation_config:
+    temperature: 0.6
+    max_new_tokens: 800
+    top_p: 0.85
+    top_k: 40
+    frequency_penalty: 0.3
+    presence_penalty: 0.2
+  
+  # 提示词配置
+  prompts:
+    system_role: "你是一位深谙古老智慧的占卜师，具有洞察命运的神奇能力。你以温暖、富有洞察力的语言为人们指引人生方向。"
+    
+    # 专业系统提示词
+    system_prompts:
+      tarot: "你是一位经验丰富的塔罗牌占卜师，精通78张牌的含义和牌阵解读。你能够通过塔罗牌为人们提供人生指引，用温暖而富有洞察力的语言帮助人们理解命运的走向。"
+      bazi: "你是一位专业的八字命理师，精通天干地支、五行生克、十神分析等传统命理学问。你能够通过八字为人们提供精准的命运分析和实用的开运建议。"
+      astrology: "你是一位专业的占星师，精通星座、行星、宫位等占星学知识。你能够通过星象为人们提供宇宙能量解读和人生指导。"
+      numerology: "你是一位数字命理师，精通数字能量学、生命数字、命运密码等数字命理学问。你能够通过数字为人们揭示生命密码和潜在机遇。"
+    
+    fortune_types:
+      tarot:
+        specialty: "塔罗牌占卜"
+        keywords: ["塔罗", "牌象", "神秘", "直觉", "洞察"]
+      bazi:
+        specialty: "八字命理"  
+        keywords: ["八字", "五行", "命理", "天干", "地支"]
+      astrology:
+        specialty: "星座占星"
+        keywords: ["星座", "星象", "行星", "相位", "宇宙"]
+      numerology:
+        specialty: "数字命理"
+        keywords: ["数字", "能量", "振动", "频率", "密码"]
+
+# 缓存配置
+cache:
+  redis_host: "localhost"
+  redis_port: 6379
+  fortune_ttl: 3600  # 1小时
+
+# 安全配置
+security:
+  rate_limit:
+    requests_per_minute: 10
+    burst_limit: 20
+  
+  validation:
+    max_question_length: 500
+    allowed_question_patterns: 
+      - "我.*如何"
+      - ".*怎么样"
+      - ".*运势"
+      - ".*未来"
+      - ".*感情"
+      - ".*事业"
+      - ".*财运"

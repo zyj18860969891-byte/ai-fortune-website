@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI智慧占卜 - 基于人工智能的塔罗、八字、星座、数字命理占卜平台" />
+    <meta name="keywords" content="AI,占卜,塔罗,八字,星座,算命,人工智能" />
+    <title>AI智慧占卜 - 探索你的命运</title>
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="AI智慧占卜 - 探索你的命运" />
+    <meta property="og:description" content="基于人工智能与古老智慧，为你揭示命运的奥秘" />
+    <meta property="og:type" content="website" />
+    
+    <!-- Preload fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <style>
+      /* Loading animation */
+      #loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #0c0a0a 0%, #1a0f2e 50%, #2d1b69 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(139, 92, 246, 0.3);
+        border-top: 3px solid #8B5CF6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+    <script type="module" crossorigin src="/assets/index-7f1ccb50.js"></script>
+    <link rel="stylesheet" href="/assets/index-e970e4cd.css">
+  </head>
+  <body>
+    <div id="root">
+      <!-- Loading screen -->
+      <div id="loading">
+        <div class="loading-spinner"></div>
+      </div>
+    </div>
+    
+    
+    <script>
+      // Hide loading screen when page loads
+      window.addEventListener('load', function() {
+        const loading = document.getElementById('loading');
+        if (loading) {
+          loading.style.opacity = '0';
+          loading.style.transition = 'opacity 0.5s ease';
+          setTimeout(() => {
+            loading.style.display = 'none';
+          }, 500);
+        }
+      });
+    </script>
+  </body>
+</html>

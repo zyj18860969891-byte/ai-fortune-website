@@ -1,0 +1,12 @@
+{
+  "service_name": "local-bazi-mcp",
+  "model_name": "qwen/Qwen2.5-Coder-32B-Instruct",
+  "endpoint": "local",
+  "is_local": true,
+  "capabilities": [
+    "八字分析",
+    "五行生克",
+    "十神解读",
+    "运势预测"
+  ]
+}
