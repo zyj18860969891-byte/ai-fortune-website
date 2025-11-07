@@ -13,5 +13,5 @@ NODE_ENV = "production"
 PORT = "3001"
 
 [build.nixpacks]
-buildCommand = "cd backend && npm install"
+buildCommand = "cd backend && npm install && echo 'Build skipped for backend-only deployment'"
 
