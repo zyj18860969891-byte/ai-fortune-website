@@ -10,7 +10,6 @@ restartPolicyMaxRetries = 10
 
 [environments.production]
 NODE_ENV = "production"
-PORT = "3001"
 
 [build.nixpacks]
 buildCommand = "cd backend && npm install && echo 'Build skipped for backend-only deployment'"
