@@ -14,7 +14,24 @@ const PORT = process.env.PORT || 3001;
 // 中间件配置
 app.use(helmet()); // 安全头
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // 允许所有来源（开发环境）
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:8080',
+      process.env.FRONTEND_URL,
+      'https://ai-fortune-website.railway.internal',
+      'https://ai-fortune-website-production-*.railway.app'
+    ];
+    
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 app.use(morgan('combined')); // 请求日志
@@ -27,9 +44,11 @@ app.use('/api/fortune', fortuneRoutes);
 // 健康检查接口
 app.get('/health', (req, res) => {
   res.json({
-    status: 'healthy',
+    status: 'ok',
+    message: 'Service is healthy',
     timestamp: new Date().toISOString(),
-    service: 'ai-fortune-backend'
+    service: 'ai-fortune-backend',
+    version: '1.0.0'
   });
 });
 
