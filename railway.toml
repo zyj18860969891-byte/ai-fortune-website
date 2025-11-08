@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node dist/simple-test-server.js"
+startCommand = "node dist/ultimate-test-server.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
