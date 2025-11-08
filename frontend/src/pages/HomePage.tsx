@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { Sparkles, Star, Moon, Sun, Calendar, Clock, User, MapPin } from 'lucide-react';
+import { Sparkles, Star, Moon, Calendar, Clock, User, MapPin } from 'lucide-react';
 
 export const HomePage: React.FC = () => {
 

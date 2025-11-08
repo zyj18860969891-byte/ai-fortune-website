@@ -66,8 +66,9 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
     setIsLoading(true);
 
     try {
-      // 调用AI占卜API
-      const response = await fetch('/api/fortune/chat', {
+      // 调用AI占卜API - 使用环境变量或默认后端地址
+      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-fortune-website-production.up.railway.app';
+      const response = await fetch(`${API_BASE_URL}/api/fortune/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -75,7 +76,8 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
         body: JSON.stringify({
           question: inputText.trim(),
           type: fortuneType,
-          context: messages.slice(-6).map(m => `${m.type === 'user' ? '用户' : '占卜师'}: ${m.content}`).join('\n')
+          context: messages.slice(-6).map(m => `${m.type === 'user' ? '用户' : '占卜师'}: ${m.content}`).join('\n'),
+          sessionId: `session-${Date.now()}`
         }),
       });
 
