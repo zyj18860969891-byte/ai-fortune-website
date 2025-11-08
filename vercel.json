@@ -1,6 +1,5 @@
 {
-  "buildCommand": "npm install && npm run build",
-  "outputDirectory": "frontend/dist",
-  "installCommand": "npm install",
-  "framework": "vite"
+  "outputDirectory": "dist",
+  "installCommand": "echo 'Skip install - using pre-built files'",
+  "framework": null
 }
