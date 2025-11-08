@@ -4,7 +4,7 @@
   "description": "基于ModelScope的AI推理算命网站",
   "main": "index.js",
   "scripts": {
-    "build": "cd frontend && vite build",
+    "build": "cd frontend && npm run build",
     "start": "echo 'Starting backend only'"
   },
   "keywords": ["ai", "fortune", "modelscope", "inference"],
