@@ -1,4 +1,5 @@
 {
+{
   "buildCommand": "npm install && vite build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
