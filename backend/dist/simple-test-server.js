@@ -8,7 +8,7 @@ const server = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('Access-Control-Allow-Origin', '*');
   
-  if (req.url === '/' || req.url === '/health') {
+  if (req.url === '/' || req.url === '/health' || req.url.includes('health')) {
     const response = {
       status: 'ok',
       message: 'TEST SERVER IS WORKING!',
