@@ -97,9 +97,6 @@ storybook-static
 # https://nextjs.org/docs/api-reference/next.config.js/introduction
 # public
 
-# Vercel
-.vercel
-
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
