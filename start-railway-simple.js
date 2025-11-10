@@ -121,7 +121,7 @@ app.get('/api/fortune/types', (req, res) => {
 // AI 占卜聊天接口
 app.post('/api/fortune/chat', async (req, res) => {
   try {
-    const { type, question } = req.body;
+    const { type, question, context, sessionId } = req.body;
     
     // 参数验证
     if (!type || !question) {
@@ -142,16 +142,41 @@ app.post('/api/fortune/chat', async (req, res) => {
       });
     }
 
-    console.log(`🔮 AI占卜请求 - 类型: ${type}, 问题: ${question}`);
+    console.log(`🔮 AI占卜请求 - 类型: ${type}, 问题: ${question}, 会话ID: ${sessionId}`);
     
     // 生成运势内容
     const result = await generateFortuneContent(type, question);
     
+    // 特殊处理八字命理
+    let response = result.content;
+    let hasBaziData = false;
+    
+    if (type === 'bazi') {
+      // 检查问题中是否包含日期信息
+      const datePattern = /\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2}/;
+      if (datePattern.test(question)) {
+        hasBaziData = true;
+        response = `🔮 八字命理分析：根据您提供的出生信息，我将为您进行专业的八字分析。${result.content}`;
+      } else {
+        response = "要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。";
+      }
+    }
+    
     res.json({
       success: true,
+      response: result.content,
+      result: {
+        prediction: result.content,
+        type: type,
+        confidence: result.confidence,
+        hasBaziData: hasBaziData
+      },
       data: {
         ...result,
         question: question,
+        context: context,
+        sessionId: sessionId,
+        hasBaziData: hasBaziData,
         typeInfo: FORTUNE_TYPES.find(ft => ft.id === type)
       },
       timestamp: new Date().toISOString()
