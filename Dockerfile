@@ -7,14 +7,14 @@ WORKDIR /app
 # 复制根目录的package.json
 COPY package*.json ./
 
-# 安装根目录依赖
+# 安装根目录依赖（生产环境）
 RUN npm install --production
 
 # 复制前端文件
 COPY frontend/ ./frontend/
 
-# 在前端目录安装依赖并构建
-RUN cd frontend && npm install && npm run build
+# 在前端目录安装依赖并使用npx构建
+RUN cd frontend && npm install && npx vite build
 
 # 暴露端口
 EXPOSE 10000
