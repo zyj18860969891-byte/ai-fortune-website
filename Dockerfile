@@ -13,8 +13,8 @@ RUN npm install --production
 # 复制前端文件
 COPY frontend/ ./frontend/
 
-# 在前端目录安装依赖并使用npx构建
-RUN cd frontend && npm install && npx vite build
+# 在前端目录安装依赖并直接调用vite可执行文件
+RUN cd frontend && npm install && ./node_modules/.bin/vite build
 
 # 暴露端口
 EXPOSE 10000
