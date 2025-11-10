@@ -8,6 +8,8 @@ restartPolicyMaxRetries = 3
 
 [build.nixpacks]
 buildCommand = "npm install"
+installCommand = "npm install"
+startCommand = "node start-railway-simple.js"
 
 [environments.production]
 NODE_ENV = "production"
