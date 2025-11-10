@@ -5,76 +5,64 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// AI Fortune Telling API Endpoints
+// AI Fortune Telling API Endpoints - 专注于八字命理
 const FORTUNE_TYPES = [
-  { id: 'love', name: '爱情运势', description: '分析你的爱情运势和感情发展' },
-  { id: 'career', name: '事业运势', description: '预测你的事业发展和职业前景' },
-  { id: 'wealth', name: '财运分析', description: '分析你的财运和投资机会' },
-  { id: 'health', name: '健康运势', description: '关注你的健康状况和养生建议' },
-  { id: 'study', name: '学业运势', description: '分析学习运势和考试表现' },
-  { id: 'overall', name: '综合运势', description: '全面分析各方面运势' }
+  { id: 'bazi', name: '八字命理', description: '基于生辰八字进行专业的命理分析' }
 ];
 
-// 模拟 AI 生成运势内容（实际项目中应调用真实的 AI API）
+// 模拟 AI 生成八字命理内容（实际项目中应调用真实的 AI API）
 async function generateFortuneContent(type, question) {
-  const prompts = {
-    love: '请以专业的命理师身份，分析这个人的爱情运势。请给出详细的分析和建议。',
-    career: '请以职业规划师的身份，分析这个人的事业发展前景。请给出具体的建议。',
-    wealth: '请以理财顾问的身份，分析这个人的财运状况。请给出投资和理财建议。',
-    health: '请以健康顾问的身份，分析这个人的健康状况。请给出养生和健康建议。',
-    study: '请以教育专家的身份，分析这个人的学习运势。请给出学习建议。',
-    overall: '请以全面的命理师身份，分析这个人的整体运势。请给出各方面的发展建议。'
-  };
+  // 只支持八字命理
+  if (type !== 'bazi') {
+    throw new Error('仅支持八字命理分析');
+  }
 
-  const prompt = prompts[type] || prompts.overall;
+  // 检查是否包含日期信息
+  const datePattern = /\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2}/;
+  const hasDate = datePattern.test(question);
   
-  // 模拟 AI 响应（实际项目中应调用 ModelScope 或其他 AI API）
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const responses = {
-        love: [
-          '💕 爱情运势：近期你的桃花运不错，有机会遇到心仪的对象。单身者要多参加社交活动，已有伴侣者要珍惜眼前的缘分。',
-          '💖 感情分析：你的感情运势较为平稳，适合深入发展。建议多与伴侣沟通，增进相互了解。',
-          '💝 爱情建议：近期是表白的好时机，但要真诚待人。感情需要双方共同经营，单方面的付出难以长久。'
-        ],
-        career: [
-          '🚀 事业运势：你的事业运正在上升期，适合把握机会展现自己的才能。工作中会遇到贵人相助。',
-          '💼 职业发展：你的职业前景良好，近期可能会有晋升或加薪的机会。建议继续努力，不要松懈。',
-          '🎯 工作建议：近期适合制定长期职业规划，明确自己的发展方向。要善于学习新技能，提升竞争力。'
-        ],
-        wealth: [
-          '💰 财运分析：你的财运正在好转，投资理财会有不错的收益。但要谨慎决策，避免盲目投资。',
-          '📈 投资建议：近期适合稳健投资，避免高风险项目。储蓄和理财规划要同步进行。',
-          '💎 财富积累：你的财富运势正在上升，但要理性消费，避免不必要的支出。合理规划资金使用。'
-        ],
-        health: [
-          '🏥 健康状况：你的整体健康状况良好，但要关注作息规律，避免过度劳累。',
-          '🧘 养生建议：建议多运动，保持良好的作息习惯。饮食要均衡，避免暴饮暴食。',
-          '💪 健康运势：近期精力充沛，适合开始新的健身计划。要注意劳逸结合，保持身心健康。'
-        ],
-        study: [
-          '📚 学习运势：你的学习运势很好，记忆力增强，适合学习新知识。',
-          '🎓 学业分析：近期学习效率高，适合制定学习计划并严格执行。考试会有不错的表现。',
-          '📖 学习建议：建议多思考，多总结，形成自己的知识体系。要劳逸结合，避免过度疲劳。'
-        ],
-        overall: [
-          '🌟 综合运势：你的整体运势很好，各方面都有不错的发展机会。要把握时机，积极进取。',
-          '🎯 运势分析：近期是你的上升期，事业、财运、感情都会有好的发展。要保持积极的心态。',
-          '💫 发展建议：建议制定全面的人生规划，平衡各方面的发展。要珍惜机会，努力奋斗。'
-        ]
-      };
+  if (hasDate) {
+    // 有日期信息，进行完整的八字分析
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          type: 'bazi',
+          content: `🔮 八字命理分析：根据您提供的出生信息，我将为您进行专业的八字分析。
 
-      const typeResponses = responses[type] || responses.overall;
-      const randomResponse = typeResponses[Math.floor(Math.random() * typeResponses.length)];
-      
-      resolve({
-        type: type,
-        content: randomResponse,
-        timestamp: new Date().toISOString(),
-        confidence: Math.floor(Math.random() * 30) + 70 // 70-100 的置信度
-      });
-    }, 1000); // 模拟 AI 响应时间
-  });
+🌟 **性格特质**：
+您的八字显示您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责，在团队中往往能发挥协调作用。
+
+💼 **事业运势**：
+您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。近期有机会获得贵人相助，建议把握机会展现自己的才能。
+
+💕 **感情婚姻**：
+您的感情运势良好，单身者有机会遇到心仪的对象，已有伴侣者感情稳定。建议多与伴侣沟通，增进相互了解。
+
+🏥 **健康状况**：
+您的整体健康状况良好，但要关注作息规律，避免过度劳累。建议多运动，保持良好的生活习惯。
+
+📈 **运势建议**：
+今年是您的发展机遇期，建议制定明确的目标，积极进取。同时要注意劳逸结合，保持身心健康。
+
+*注：以上分析基于传统八字理论，仅供参考娱乐。*`,
+          timestamp: new Date().toISOString(),
+          confidence: 85
+        });
+      }, 1000);
+    });
+  } else {
+    // 没有日期信息，提示用户提供
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({
+          type: 'bazi',
+          content: "要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。",
+          timestamp: new Date().toISOString(),
+          confidence: 0
+        });
+      }, 500);
+    });
+  }
 }
 
 // 启用 CORS
