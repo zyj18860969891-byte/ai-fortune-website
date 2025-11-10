@@ -5,7 +5,6 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "build": "echo 'Build completed - backend only deployment'",
     "start": "node dist/server.js",
     "test": "jest"
   },
@@ -20,7 +19,7 @@
     "morgan": "^1.10.0",
     "node-fetch": "^3.3.2",
     "redis": "^4.6.8",
-    "uuid": "^13.0.0"
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",

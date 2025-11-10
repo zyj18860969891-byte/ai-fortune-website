@@ -91,6 +91,26 @@ async function generateFortuneContent(type, question, context, sessionId) {
     console.log('🔑 Token 长度:', modelscopeToken.length);
     console.log('💬 提示词:', prompt);
 
+    // 构建请求体
+    const requestBody = {
+      model: modelId,
+      messages: [
+        {
+          role: 'system',
+          content: '你是一位专业的八字命理师，擅长根据出生日期进行详细的八字分析。'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: 2000,
+      temperature: 0.7,
+      stream: false
+    };
+    
+    console.log('📤 请求体:', JSON.stringify(requestBody, null, 2));
+
     // 调用 ModelScope API
     const response = await fetch(`https://api.modelscope.cn/v1/chat/completions`, {
       method: 'POST',
@@ -99,22 +119,7 @@ async function generateFortuneContent(type, question, context, sessionId) {
         'Content-Type': 'application/json',
         'User-Agent': 'AI-Fortune-Website/1.0'
       },
-      body: JSON.stringify({
-        model: modelId,
-        messages: [
-          {
-            role: 'system',
-            content: '你是一位专业的八字命理师，擅长根据出生日期进行详细的八字分析。'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 2000,
-        temperature: 0.7,
-        stream: false
-      })
+      body: JSON.stringify(requestBody)
     });
 
     console.log('📡 API 响应状态:', response.status, response.statusText);
@@ -129,8 +134,13 @@ async function generateFortuneContent(type, question, context, sessionId) {
     const data = await response.json();
     console.log('✅ API 调用成功，响应数据:', JSON.stringify(data, null, 2));
 
-    const aiContent = data.choices?.[0]?.message?.content || '抱歉，暂时无法提供八字分析。';
+    const aiContent = data.choices?.[0]?.message?.content;
     console.log('🤖 AI 生成的内容:', aiContent);
+    
+    if (!aiContent) {
+      console.error('❌ AI 内容为空');
+      throw new Error('AI 返回内容为空');
+    }
 
     return {
       type: 'bazi',
