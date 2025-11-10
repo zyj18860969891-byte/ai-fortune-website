@@ -22,8 +22,18 @@ async function generateFortuneContent(type, question, context, sessionId) {
   const modelscopeModelId = process.env.MODELSCOPE_MODEL_ID;
   const frontendUrl = process.env.FRONTEND_URL;
 
+  console.log('🔧 环境变量配置:');
+  console.log('- ModelScope Token:', modelscopeToken ? '已配置' : '未配置');
+  console.log('- ModelScope Model ID:', modelscopeModelId || '未配置');
+  console.log('- Frontend URL:', frontendUrl || '未配置');
+  console.log('- Node Env:', process.env.NODE_ENV || '未配置');
+
+  // 使用配置的模型ID（优先使用环境变量配置）
+  const modelId = modelscopeModelId;
+  console.log('🤖 使用模型:', modelId);
+
   if (!modelscopeToken || !modelscopeModelId) {
-    console.error('ModelScope 配置缺失');
+    console.error('❌ ModelScope 配置缺失');
     throw new Error('AI服务配置不完整');
   }
 
@@ -84,7 +94,7 @@ async function generateFortuneContent(type, question, context, sessionId) {
         'User-Agent': 'AI-Fortune-Website/1.0'
       },
       body: JSON.stringify({
-        model: modelscopeModelId,
+        model: modelId,
         messages: [
           {
             role: 'system',
@@ -320,4 +330,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎉 AI Fortune Website running on port ${PORT}`);
   console.log(`🌐 Frontend: https://your-app.railway.app`);
   console.log(`🔍 Health Check: https://your-app.railway.app/health`);
+  console.log(`🔧 Environment Check: https://your-app.railway.app/api/env`);
 });
