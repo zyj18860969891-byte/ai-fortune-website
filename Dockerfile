@@ -7,8 +7,8 @@ WORKDIR /app
 # 复制根目录的package.json
 COPY package*.json ./
 
-# 安装根目录依赖
-RUN npm install --production
+# 安装根目录依赖和开发依赖（包括vite）
+RUN npm install
 
 # 复制前端文件
 COPY frontend/ ./frontend/
