@@ -4,9 +4,10 @@
   "description": "基于ModelScope的AI推理算命网站",
   "main": "index.js",
   "scripts": {
-    "build": "cd frontend && npm run build",
-    "start": "node server.js",
-    "dev": "node server.js"
+    "build": "cd frontend && npm install && npm run build",
+    "start": "node start-railway-simple.js",
+    "dev": "node start-railway-simple.js",
+    "docker-build": "docker build -t ai-fortune-website ."
   },
   "dependencies": {
     "express": "^4.18.2",

@@ -1,13 +1,14 @@
 [build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
 
 [deploy]
 startCommand = "node start-railway-simple.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
-[build.nixpacks]
-buildCommand = "npm install"
+[build.docker]
+buildContext = "."
+dockerfilePath = "Dockerfile"
 
 [environments.production]
 NODE_ENV = "production"
