@@ -17,20 +17,40 @@ const birthDataCache = new Map();
 function extractAndCacheBirthData(context, sessionId) {
   if (!context) return null;
   
-  console.log('🔍 开始从上下文提取出生数据，context长度:', context.length);
+  console.log('🔍 开始从上下文提取出生数据，context类型:', typeof context, 'context值:', context);
+  
+  // 确保 context 是数组
+  let contextArray = context;
+  if (Array.isArray(context)) {
+    console.log('🔍 context 是数组，长度:', context.length);
+  } else if (typeof context === 'string') {
+    // 如果是字符串，尝试解析
+    try {
+      contextArray = JSON.parse(context);
+      console.log('🔍 context 是字符串，已解析为数组，长度:', contextArray.length);
+    } catch (e) {
+      console.log('❌ context 字符串解析失败:', e.message);
+      contextArray = [];
+    }
+  } else {
+    console.log('❌ context 不是数组或字符串，类型:', typeof context);
+    contextArray = [];
+  }
   
   // 方法1：从上下文中提取用户提供的出生日期（不提取占卜师的回复）
-  const userMessages = context.filter(msg => msg.type === 'user');
+  const userMessages = contextArray.filter(msg => msg && msg.type === 'user');
   
   let birthDate = null;
   
   // 从用户消息中提取出生日期
   for (const message of userMessages) {
-    const dateMatch = message.content.match(/(\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2})/);
-    if (dateMatch) {
-      birthDate = dateMatch[1];
-      console.log('✅ 找到出生日期:', birthDate);
-      break;
+    if (message && message.content) {
+      const dateMatch = message.content.match(/(\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2})/);
+      if (dateMatch) {
+        birthDate = dateMatch[1];
+        console.log('✅ 找到出生日期:', birthDate);
+        break;
+      }
     }
   }
   
