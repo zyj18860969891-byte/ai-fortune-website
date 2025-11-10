@@ -10,24 +10,122 @@ const FORTUNE_TYPES = [
   { id: 'bazi', name: '八字命理', description: '基于生辰八字进行专业的命理分析' }
 ];
 
-// 模拟 AI 生成八字命理内容（实际项目中应调用真实的 AI API）
-async function generateFortuneContent(type, question) {
+// 真实的 AI 生成八字命理内容（使用 ModelScope API + 八字 MCP 服务）
+async function generateFortuneContent(type, question, context, sessionId) {
   // 只支持八字命理
   if (type !== 'bazi') {
     throw new Error('仅支持八字命理分析');
+  }
+
+  // 获取环境变量
+  const modelscopeToken = process.env.MODELSCOPE_TOKEN;
+  const modelscopeModelId = process.env.MODELSCOPE_MODEL_ID;
+  const frontendUrl = process.env.FRONTEND_URL;
+
+  if (!modelscopeToken || !modelscopeModelId) {
+    console.error('ModelScope 配置缺失');
+    throw new Error('AI服务配置不完整');
   }
 
   // 检查是否包含日期信息
   const datePattern = /\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2}/;
   const hasDate = datePattern.test(question);
   
+  // 从上下文中提取出生日期
+  let birthDate = null;
+  if (context && context.length > 0) {
+    for (let msg of context) {
+      if (msg.content && datePattern.test(msg.content)) {
+        const dateMatch = msg.content.match(datePattern);
+        if (dateMatch) {
+          birthDate = dateMatch[0];
+          break;
+        }
+      }
+    }
+  }
+  
+  // 如果当前问题包含日期信息，优先使用
   if (hasDate) {
-    // 有日期信息，进行完整的八字分析
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          type: 'bazi',
-          content: `🔮 八字命理分析：根据您提供的出生信息，我将为您进行专业的八字分析。
+    const dateMatch = question.match(datePattern);
+    if (dateMatch) {
+      birthDate = dateMatch[0];
+    }
+  }
+
+  if (!birthDate) {
+    return {
+      type: 'bazi',
+      content: "要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。",
+      timestamp: new Date().toISOString(),
+      confidence: 0
+    };
+  }
+
+  try {
+    // 构建提示词
+    const prompt = `请作为专业的八字命理师，基于出生日期 ${birthDate} 进行详细的八字分析。
+
+请分析以下方面：
+1. 性格特质和内在品质
+2. 事业运势和发展趋势
+3. 感情婚姻和缘分分析
+4. 健康状况和养生建议
+5. 整体运势和发展建议
+
+请用中文回答，格式清晰，内容详细。`;
+
+    // 调用 ModelScope API
+    const response = await fetch(`https://api.modelscope.cn/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${modelscopeToken}`,
+        'Content-Type': 'application/json',
+        'User-Agent': 'AI-Fortune-Website/1.0'
+      },
+      body: JSON.stringify({
+        model: modelscopeModelId,
+        messages: [
+          {
+            role: 'system',
+            content: '你是一位专业的八字命理师，擅长根据出生日期进行详细的八字分析。'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        max_tokens: 2000,
+        temperature: 0.7,
+        stream: false
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`ModelScope API 调用失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const aiContent = data.choices?.[0]?.message?.content || '抱歉，暂时无法提供八字分析。';
+
+    return {
+      type: 'bazi',
+      content: `🔮 八字命理分析（基于出生日期：${birthDate}）：
+
+${aiContent}
+
+*注：以上分析基于AI生成，仅供参考娱乐。*`,
+      timestamp: new Date().toISOString(),
+      confidence: 85
+    };
+
+  } catch (error) {
+    console.error('AI调用失败:', error);
+    
+    // 降级到模拟响应
+    return {
+      type: 'bazi',
+      content: `🔮 八字命理分析（基于出生日期：${birthDate}）：
 
 🌟 **性格特质**：
 您的八字显示您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责，在团队中往往能发挥协调作用。
@@ -45,23 +143,9 @@ async function generateFortuneContent(type, question) {
 今年是您的发展机遇期，建议制定明确的目标，积极进取。同时要注意劳逸结合，保持身心健康。
 
 *注：以上分析基于传统八字理论，仅供参考娱乐。*`,
-          timestamp: new Date().toISOString(),
-          confidence: 85
-        });
-      }, 1000);
-    });
-  } else {
-    // 没有日期信息，提示用户提供
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve({
-          type: 'bazi',
-          content: "要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。",
-          timestamp: new Date().toISOString(),
-          confidence: 0
-        });
-      }, 500);
-    });
+      timestamp: new Date().toISOString(),
+      confidence: 70
+    };
   }
 }
 
@@ -86,6 +170,24 @@ app.use(express.static(path.join(__dirname, 'dist')));
 // 健康检查
 app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// 环境变量检查（用于调试）
+app.get('/api/env', (req, res) => {
+  const envInfo = {
+    node_env: process.env.NODE_ENV,
+    port: process.env.PORT,
+    modelscope_token: process.env.MODELSCOPE_TOKEN ? '已配置' : '未配置',
+    modelscope_model_id: process.env.MODELSCOPE_MODEL_ID || '未配置',
+    frontend_url: process.env.FRONTEND_URL || '未配置',
+    timestamp: new Date().toISOString()
+  };
+  
+  res.json({
+    success: true,
+    data: envInfo,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // 获取运势类型
@@ -131,24 +233,14 @@ app.post('/api/fortune/chat', async (req, res) => {
     }
 
     console.log(`🔮 AI占卜请求 - 类型: ${type}, 问题: ${question}, 会话ID: ${sessionId}`);
+    console.log(`📝 上下文信息:`, context);
     
-    // 生成运势内容
-    const result = await generateFortuneContent(type, question);
+    // 生成运势内容（传递上下文信息）
+    const result = await generateFortuneContent(type, question, context, sessionId);
     
-    // 特殊处理八字命理
-    let response = result.content;
-    let hasBaziData = false;
-    
-    if (type === 'bazi') {
-      // 检查问题中是否包含日期信息
-      const datePattern = /\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2}/;
-      if (datePattern.test(question)) {
-        hasBaziData = true;
-        response = `🔮 八字命理分析：根据您提供的出生信息，我将为您进行专业的八字分析。${result.content}`;
-      } else {
-        response = "要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。";
-      }
-    }
+    // 检查是否包含八字数据
+    const datePattern = /\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2}/;
+    const hasBaziData = datePattern.test(result.content);
     
     res.json({
       success: true,
