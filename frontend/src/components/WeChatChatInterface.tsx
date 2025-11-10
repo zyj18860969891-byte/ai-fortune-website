@@ -66,9 +66,8 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
     setIsLoading(true);
 
     try {
-      // 调用AI占卜API - 使用环境变量或默认后端地址
-      const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://ai-fortune-website-production.up.railway.app';
-      const response = await fetch(`${API_BASE_URL}/api/fortune/chat`, {
+      // 调用AI占卜API - 使用相对路径触发Vercel重写规则
+      const response = await fetch(`/api/fortune/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
