@@ -20,61 +20,20 @@ const birthDataCache = new Map();
 function extractAndCacheBirthData(context, sessionId) {
   if (!context) return null;
   
-  console.log('🔍 开始从上下文提取出生数据，context类型:', typeof context, 'context长度:', context ? context.length : 'undefined');
-  
-  // 确保 context 是数组
-  let contextArray = context;
-  if (Array.isArray(context)) {
-    console.log('🔍 context 是数组，长度:', context.length);
-  } else if (typeof context === 'string') {
-    // 清理字符串，移除特殊字符
-    let cleanString = context
-      .replace(/用/g, '') // 移除特殊字符
-      .replace(/[^\x20-\x7E\n\r\t]/g, ''); // 保留可打印字符
-    
-    console.log('🔍 context 是字符串，已清理:', cleanString.substring(0, 100));
-    
-    // 尝试解析为 JSON
-    try {
-      contextArray = JSON.parse(cleanString);
-      console.log('🔍 context 是字符串，已解析为数组，长度:', contextArray.length);
-    } catch (e) {
-      console.log('❌ context 字符串解析失败:', e.message);
-      // 如果解析失败，尝试提取日期信息
-      const dateMatch = cleanString.match(/(\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2})/);
-      if (dateMatch) {
-        console.log('✅ 从字符串中直接找到出生日期:', dateMatch[1]);
-        return dateMatch[1];
-      }
-      contextArray = [];
-    }
-  } else {
-    console.log('❌ context 不是数组或字符串，类型:', typeof context);
-    contextArray = [];
-  }
-  
-  // 确保是数组且不为空
-  if (!Array.isArray(contextArray) || contextArray.length === 0) {
-    console.log('❌ contextArray 不是有效数组');
-    return null;
-  }
+  console.log('🔍 开始从上下文提取出生数据，context长度:', context.length);
   
   // 方法1：从上下文中提取用户提供的出生日期（不提取占卜师的回复）
-  const userMessages = contextArray.filter(msg => msg && msg.type === 'user');
-  
-  console.log('🔍 找到用户消息数量:', userMessages.length);
+  const userMessages = context.filter(msg => msg.type === 'user');
   
   let birthDate = null;
   
   // 从用户消息中提取出生日期
   for (const message of userMessages) {
-    if (message && message.content) {
-      const dateMatch = message.content.match(/(\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2})/);
-      if (dateMatch) {
-        birthDate = dateMatch[1];
-        console.log('✅ 找到出生日期:', birthDate);
-        break;
-      }
+    const dateMatch = message.content.match(/(\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2})/);
+    if (dateMatch) {
+      birthDate = dateMatch[1];
+      console.log('✅ 找到出生日期:', birthDate);
+      break;
     }
   }
   
@@ -86,6 +45,7 @@ function extractAndCacheBirthData(context, sessionId) {
   
   return birthDate;
 }
+
 
 // 启用 CORS
 app.use(cors({
