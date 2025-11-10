@@ -1,5 +1,11 @@
 {
-  "outputDirectory": "dist",
-  "installCommand": "echo 'Skip install - using pre-built files'",
-  "framework": null
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "cd frontend && npm install",
+  "framework": "vite",
+  "functions": {
+    "api/**/*.js": {
+      "maxDuration": 30
+    }
+  }
 }
