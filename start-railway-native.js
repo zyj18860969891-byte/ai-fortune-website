@@ -5,6 +5,9 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+console.log('🔧 使用端口:', PORT);
+console.log('🔧 部署环境:', process.env.NODE_ENV || 'development');
+
 // AI Fortune Telling API Endpoints - 专注于八字命理
 const FORTUNE_TYPES = [
   { id: 'bazi', name: '八字命理', description: '基于生辰八字进行专业的命理分析' }
@@ -17,19 +20,32 @@ const birthDataCache = new Map();
 function extractAndCacheBirthData(context, sessionId) {
   if (!context) return null;
   
-  console.log('🔍 开始从上下文提取出生数据，context类型:', typeof context, 'context值:', context);
+  console.log('🔍 开始从上下文提取出生数据，context类型:', typeof context, 'context长度:', context ? context.length : 'undefined');
   
   // 确保 context 是数组
   let contextArray = context;
   if (Array.isArray(context)) {
     console.log('🔍 context 是数组，长度:', context.length);
   } else if (typeof context === 'string') {
-    // 如果是字符串，尝试解析
+    // 清理字符串，移除特殊字符
+    let cleanString = context
+      .replace(/用/g, '') // 移除特殊字符
+      .replace(/[^\x20-\x7E\n\r\t]/g, ''); // 保留可打印字符
+    
+    console.log('🔍 context 是字符串，已清理:', cleanString.substring(0, 100));
+    
+    // 尝试解析为 JSON
     try {
-      contextArray = JSON.parse(context);
+      contextArray = JSON.parse(cleanString);
       console.log('🔍 context 是字符串，已解析为数组，长度:', contextArray.length);
     } catch (e) {
       console.log('❌ context 字符串解析失败:', e.message);
+      // 如果解析失败，尝试提取日期信息
+      const dateMatch = cleanString.match(/(\d{4}[\.\年]\d{1,2}[\.\月]\d{1,2})/);
+      if (dateMatch) {
+        console.log('✅ 从字符串中直接找到出生日期:', dateMatch[1]);
+        return dateMatch[1];
+      }
       contextArray = [];
     }
   } else {
@@ -37,8 +53,16 @@ function extractAndCacheBirthData(context, sessionId) {
     contextArray = [];
   }
   
+  // 确保是数组且不为空
+  if (!Array.isArray(contextArray) || contextArray.length === 0) {
+    console.log('❌ contextArray 不是有效数组');
+    return null;
+  }
+  
   // 方法1：从上下文中提取用户提供的出生日期（不提取占卜师的回复）
   const userMessages = contextArray.filter(msg => msg && msg.type === 'user');
+  
+  console.log('🔍 找到用户消息数量:', userMessages.length);
   
   let birthDate = null;
   
@@ -286,63 +310,105 @@ async function generateFortuneContent(question, context, type, systemPrompt) {
     const headers = {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'application/json'
     };
     
-    // 发送请求（使用原生 fetch）
-    const response = await fetch('https://api.modelscope.cn/v1/chat/completions', {
-      method: 'POST',
-      headers: headers,
-      body: JSON.stringify(requestBody),
-      timeout: 30000
-    });
+    // 尝试多个 API 端点
+    const endpoints = [
+      'https://api.modelscope.cn/v1/chat/completions',
+      'https://api-inference.modelscope.cn/v1/chat/completions'
+    ];
     
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    let lastError = null;
+    
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`🔗 尝试连接: ${endpoint}`);
+        
+        // 发送请求（使用原生 fetch）
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25秒超时
+        
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const responseData = await response.json();
+        const aiResponse = responseData.choices[0].message.content;
+        
+        console.log('✅ API 调用成功');
+        console.log('🔑 Token 长度:', aiResponse.length);
+        
+        // 格式化响应
+        const formattedResponse = {
+          prediction: aiResponse,
+          confidence: 0.9,
+          type: type,
+          timestamp: new Date().toISOString(),
+          model: modelId,
+          tokenCount: aiResponse.length
+        };
+        
+        console.log('✅ AI生成结果:', formattedResponse);
+        
+        return formattedResponse;
+        
+      } catch (error) {
+        console.log(`❌ 端点 ${endpoint} 失败:`, error.message);
+        lastError = error;
+        continue; // 尝试下一个端点
+      }
     }
     
-    const responseData = await response.json();
-    const aiResponse = responseData.choices[0].message.content;
-    
-    console.log('✅ API 调用成功');
-    
-    // 格式化响应
-    const formattedResponse = {
-      prediction: aiResponse,
-      confidence: 0.9,
-      type: type,
-      timestamp: new Date().toISOString(),
-      model: modelId,
-      tokenCount: aiResponse.length
-    };
-    
-    console.log('✅ AI生成结果:', formattedResponse);
-    
-    return formattedResponse;
+    // 如果所有端点都失败
+    throw new Error(`所有 API 端点都失败: ${lastError.message}`);
     
   } catch (error) {
     console.error('❌ AI调用失败:', error.message);
     console.error('❌ 错误堆栈:', error.stack);
     
-    // 如果 API 调用失败，返回模拟响应
+    // 如果 API 调用失败，返回基于上下文的响应
+    let prediction = '';
+    const birthDate = extractAndCacheBirthData(context, 'fallback-session');
+    
+    if (birthDate) {
+      prediction = `🔮 八字命理分析（基于出生日期：${birthDate}）：\n\n🌟 **性格特质**：\n您的八字显示您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责，在团队中往往能发挥协调作用。\n\n💼 **事业运势**：\n您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。近期有机会获得贵人相助，建议把握机会展现自己的才能。\n\n💕 **感情婚姻**：\n您的感情运势良好，单身者有机会遇到心仪的对象，已有伴侣者感情稳定。建议多与伴侣沟通，增进相互了解。\n\n🏥 **健康状况**：\n您的整体健康状况良好，但要关注作息规律，避免过度劳累。建议多运动，保持良好的生活习惯。\n\n📈 **运势建议**：\n今年是您的发展机遇期，建议制定明确的目标，积极进取。同时要注意劳逸结合，保持身心健康。\n\n*注：以上分析基于传统八字理论，仅供参考娱乐。*`;
+    } else {
+      prediction = `🔮 八字命理分析：\n\n您好！要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。\n\n🌟 **性格特质**：\n根据您的描述，您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责。\n\n💼 **事业运势**：\n您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。\n\n*注：以上分析基于您提供的信息，仅供参考娱乐。*`;
+    }
+    
     const mockResponse = {
-      prediction: `🔮 八字命理分析（基于您提供的信息）：\n\n🌟 **性格特质**：\n您的八字显示您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责，在团队中往往能发挥协调作用。\n\n💼 **事业运势**：\n您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。近期有机会获得贵人相助，建议把握机会展现自己的才能。\n\n💕 **感情婚姻**：\n您的感情运势良好，单身者有机会遇到心仪的对象，已有伴侣者感情稳定。建议多与伴侣沟通，增进相互了解。\n\n🏥 **健康状况**：\n您的整体健康状况良好，但要关注作息规律，避免过度劳累。建议多运动，保持良好的生活习惯。\n\n📈 **运势建议**：\n今年是您的发展机遇期，建议制定明确的目标，积极进取。同时要注意劳逸结合，保持身心健康。\n\n*注：以上分析基于传统八字理论，仅供参考娱乐。*`,
-      confidence: 0.5,
+      prediction: prediction,
+      confidence: birthDate ? 0.7 : 0.5,
       type: type,
       timestamp: new Date().toISOString(),
       model: 'fallback',
       error: error.message
     };
     
-    console.log('🔄 使用模拟响应');
+    console.log('🔄 使用智能降级响应');
     return mockResponse;
   }
 }
 
 app.listen(PORT, '0.0.0.0', () => {
+  const hostname = process.env.RAILWAY_DEPLOYMENT_ID || 'your-app.railway.app';
+  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN || `https://${hostname}.railway.app`;
+  
   console.log(`🎉 AI Fortune Website running on port ${PORT}`);
-  console.log(`🌐 Frontend: https://your-app.railway.app`);
-  console.log(`🔍 Health Check: https://your-app.railway.app/health`);
-  console.log(`🔧 Environment Check: https://your-app.railway.app/api/env`);
+  console.log(`🌐 Frontend: ${baseUrl}`);
+  console.log(`🔍 Health Check: ${baseUrl}/health`);
+  console.log(`🔧 Environment Check: ${baseUrl}/api/env`);
   console.log(`🤖 Using ModelScope: ${process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507'}`);
 });
