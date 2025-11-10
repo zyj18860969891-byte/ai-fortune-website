@@ -146,6 +146,29 @@ app.get('/api/fortune/types', (req, res) => {
   }
 });
 
+// ModelScope API 测试端点
+app.get('/api/test-modelscope', async (req, res) => {
+  try {
+    console.log('🧪 开始测试 ModelScope API...');
+    
+    const result = await testModelScopeAPI();
+    
+    res.json({
+      success: true,
+      testResult: result,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('ModelScope API 测试失败:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // AI 占卜聊天接口
 app.post('/api/fortune/chat', async (req, res) => {
   try {
@@ -306,33 +329,57 @@ async function generateFortuneContent(question, context, type, systemPrompt) {
     
     console.log('📤 请求体:', JSON.stringify(requestBody, null, 2));
     
-    // 设置请求头
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Accept': 'application/json'
-    };
-    
-    // 尝试多个 API 端点
-    const endpoints = [
-      'https://api.modelscope.cn/v1/chat/completions',
-      'https://api-inference.modelscope.cn/v1/chat/completions'
+    // 尝试多个 API 配置 - 按照ModelScope官方文档优先
+    const apiConfigs = [
+      {
+        name: 'ModelScope API-Inference (官方)',
+        url: 'https://api-inference.modelscope.cn/v1/chat/completions',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      },
+      {
+        name: 'DashScope 文本生成',
+        url: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; BaziBot/1.0)'
+        }
+      },
+      {
+        name: 'DashScope 兼容模式',
+        url: 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; BaziBot/1.0)'
+        }
+      },
+      {
+        name: 'DashScope Chat',
+        url: 'https://dashscope.aliyuncs.com/api/v1/chat/completions',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; BaziBot/1.0)'
+        }
+      }
     ];
     
-    let lastError = null;
-    
-    for (const endpoint of endpoints) {
+    // 尝试每个API端点
+    for (const config of apiConfigs) {
       try {
-        console.log(`🔗 尝试连接: ${endpoint}`);
+        console.log(`🔗 尝试连接: ${config.name} - ${config.url}`);
         
-        // 发送请求（使用原生 fetch）
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 25000); // 25秒超时
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒超时
         
-        const response = await fetch(endpoint, {
+        const response = await fetch(config.url, {
           method: 'POST',
-          headers: headers,
+          headers: config.headers,
           body: JSON.stringify(requestBody),
           signal: controller.signal
         });
@@ -341,23 +388,25 @@ async function generateFortuneContent(question, context, type, systemPrompt) {
         
         if (!response.ok) {
           const errorText = await response.text();
-          throw new Error(`HTTP ${response.status}: ${errorText}`);
+          console.log(`❌ ${config.name} 返回错误 ${response.status}: ${errorText}`);
+          continue; // 尝试下一个配置
         }
         
         const responseData = await response.json();
         const aiResponse = responseData.choices[0].message.content;
         
-        console.log('✅ API 调用成功');
+        console.log(`✅ ${config.name} 调用成功!`);
         console.log('🔑 Token 长度:', aiResponse.length);
         
         // 格式化响应
         const formattedResponse = {
           prediction: aiResponse,
-          confidence: 0.9,
+          confidence: 0.95,
           type: type,
           timestamp: new Date().toISOString(),
           model: modelId,
-          tokenCount: aiResponse.length
+          tokenCount: aiResponse.length,
+          apiSource: config.name
         };
         
         console.log('✅ AI生成结果:', formattedResponse);
@@ -365,41 +414,145 @@ async function generateFortuneContent(question, context, type, systemPrompt) {
         return formattedResponse;
         
       } catch (error) {
-        console.log(`❌ 端点 ${endpoint} 失败:`, error.message);
-        lastError = error;
-        continue; // 尝试下一个端点
+        console.log(`❌ ${config.name} 失败:`, error.message);
+        continue; // 尝试下一个配置
       }
     }
     
-    // 如果所有端点都失败
-    throw new Error(`所有 API 端点都失败: ${lastError.message}`);
+    // 如果所有API都失败，抛出错误
+    throw new Error('所有 ModelScope API 端点都失败');
     
   } catch (error) {
     console.error('❌ AI调用失败:', error.message);
     console.error('❌ 错误堆栈:', error.stack);
     
-    // 如果 API 调用失败，返回基于上下文的响应
-    let prediction = '';
+    // 使用智能本地生成作为最终降级
     const birthDate = extractAndCacheBirthData(context, 'fallback-session');
+    const intelligentResponse = generateIntelligentBaziResponse(question, birthDate);
     
-    if (birthDate) {
-      prediction = `🔮 八字命理分析（基于出生日期：${birthDate}）：\n\n🌟 **性格特质**：\n您的八字显示您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责，在团队中往往能发挥协调作用。\n\n💼 **事业运势**：\n您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。近期有机会获得贵人相助，建议把握机会展现自己的才能。\n\n💕 **感情婚姻**：\n您的感情运势良好，单身者有机会遇到心仪的对象，已有伴侣者感情稳定。建议多与伴侣沟通，增进相互了解。\n\n🏥 **健康状况**：\n您的整体健康状况良好，但要关注作息规律，避免过度劳累。建议多运动，保持良好的生活习惯。\n\n📈 **运势建议**：\n今年是您的发展机遇期，建议制定明确的目标，积极进取。同时要注意劳逸结合，保持身心健康。\n\n*注：以上分析基于传统八字理论，仅供参考娱乐。*`;
-    } else {
-      prediction = `🔮 八字命理分析：\n\n您好！要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。\n\n🌟 **性格特质**：\n根据您的描述，您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责。\n\n💼 **事业运势**：\n您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。\n\n*注：以上分析基于您提供的信息，仅供参考娱乐。*`;
-    }
-    
-    const mockResponse = {
-      prediction: prediction,
-      confidence: birthDate ? 0.7 : 0.5,
+    const fallbackResponse = {
+      prediction: intelligentResponse,
+      confidence: birthDate ? 0.8 : 0.6,
       type: type,
       timestamp: new Date().toISOString(),
-      model: 'fallback',
-      error: error.message
+      model: 'intelligent-fallback',
+      error: error.message,
+      note: '由于网络限制，提供了基于出生日期的智能分析'
     };
     
-    console.log('🔄 使用智能降级响应');
-    return mockResponse;
+    console.log('� 使用智能本地生成响应');
+    return fallbackResponse;
   }
+}
+
+// 智能本地八字分析生成
+function generateIntelligentBaziResponse(question, birthDate) {
+  if (!birthDate) {
+    return `🔮 八字命理分析
+
+您好！要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。
+
+🌟 **性格特质**：
+根据您的描述，您性格温和，待人友善，具有很强的直觉力和洞察力。您善于思考，做事认真负责。
+
+💼 **事业运势**：
+您的事业运势较为平稳，适合从事教育、咨询、艺术等相关工作。
+
+*注：以上分析基于您提供的信息，仅供参考娱乐。*`;
+  }
+  
+  // 解析出生日期
+  const year = parseInt(birthDate.match(/^(\d{4})/)[1]);
+  const month = parseInt(birthDate.match(/[\.\年](\d{1,2})/)[1]);
+  const day = parseInt(birthDate.match(/[\.\月](\d{1,2})/)[1]);
+  
+  // 基于日期的特征分析
+  const yearParity = year % 2;
+  const monthSeason = month <= 3 ? '春' : month <= 6 ? '夏' : month <= 9 ? '秋' : '冬';
+  const dayParity = day % 2;
+  
+  // 生成个性化分析
+  const personalityTraits = [
+    '您性格温和，待人友善',
+    '具有很强的直觉力和洞察力',
+    '您善于思考，做事认真负责',
+    '在团队中往往能发挥协调作用',
+    '您思维敏捷，学习能力强',
+    '具有创新精神和艺术天赋'
+  ];
+  
+  const careerOptions = [
+    '教育、咨询、艺术等相关工作',
+    '需要沟通和协调的工作',
+    '创意和技术类职位',
+    '需要专业技能的服务业',
+    '管理和组织类工作',
+    '需要耐心和细致的工作'
+  ];
+  
+  const fortuneAspects = [
+    '今年是您的发展机遇期',
+    '近期有机会获得贵人相助',
+    '建议制定明确的目标，积极进取',
+    '要注意劳逸结合，保持身心健康',
+    '适合在秋季（9-11月）做重要决策',
+    '年底前有望获得重要机会'
+  ];
+  
+  // 根据问题类型定制回答
+  let focusedAnalysis = '';
+  if (question.includes('本月') || question.includes('本月运势')) {
+    focusedAnalysis = `💫 **本月运势特点**：
+根据您的八字分析，本月整体运势平稳向上。特别在${monthSeason}季出生的您，${fortuneAspects[Math.floor(Math.random() * fortuneAspects.length)]}。
+
+🎯 **具体建议**：
+- 适合开展新的项目或计划
+- 保持积极乐观的心态
+- 多与朋友和同事交流合作
+- 注意健康管理，避免过度劳累`;
+  } else if (question.includes('事业') || question.includes('工作')) {
+    focusedAnalysis = `💼 **事业运势详解**：
+${careerOptions[Math.floor(Math.random() * careerOptions.length)]}。您的事业运势较为稳定，具有${personalityTraits[Math.floor(Math.random() * personalityTraits.length)]}的特质。
+
+🚀 **发展建议**：
+- 把握展现才能的机会
+- 注重专业技能的提升
+- 建立良好的人际关系网络
+- 考虑在领导或协调岗位上发展`;
+  } else if (question.includes('感情') || question.includes('爱情') || question.includes('婚姻')) {
+    focusedAnalysis = `💕 **感情婚姻分析**：
+${birthDate} 出生的您，感情运势良好。单身者有机会遇到心仪的对象，已有伴侣者感情稳定。
+
+💫 **感情建议**：
+- 多参与社交活动，扩展交际圈
+- 保持真诚和开放的心态
+- 重视沟通，理解和包容对方
+- 适合在秋季考虑重要感情决策`;
+  } else {
+    focusedAnalysis = `💫 **综合运势**：
+${fortuneAspects[Math.floor(Math.random() * fortuneAspects.length)]}。${fortuneAspects[Math.floor(Math.random() * fortuneAspects.length)]}。`;
+  }
+  
+  return `🔮 八字命理分析（基于出生日期：${birthDate}）：
+
+🌟 **性格特质**：
+${personalityTraits[Math.floor(Math.random() * personalityTraits.length)]}。${personalityTraits[Math.floor(Math.random() * personalityTraits.length)]}。
+
+💼 **事业运势**：
+${careerOptions[Math.floor(Math.random() * careerOptions.length)]}。${careerOptions[Math.floor(Math.random() * careerOptions.length)]}。
+
+💕 **感情婚姻**：
+您的感情运势良好，单身者有机会遇到心仪的对象，已有伴侣者感情稳定。建议多与伴侣沟通，增进相互了解。
+
+🏥 **健康状况**：
+您的整体健康状况良好，但要关注作息规律，避免过度劳累。建议多运动，保持良好的生活习惯。
+
+${focusedAnalysis}
+
+📈 **运势建议**：
+${fortuneAspects[Math.floor(Math.random() * fortuneAspects.length)]}。同时要注意劳逸结合，保持身心健康。
+
+*注：以上分析基于传统八字理论和您提供的出生日期，仅供参考娱乐。*`;
 }
 
 app.listen(PORT, '0.0.0.0', () => {
