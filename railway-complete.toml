@@ -2,7 +2,7 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node start-railway-fixed.js"
+startCommand = "node start-railway-complete.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 
@@ -13,6 +13,6 @@ buildCommand = "npm install"
 NODE_ENV = "production"
 PORT = 10000
 
-# 强制使用 Node.js 18
+# 强制使用完整实现
 [build.environment]
 NIXPACKS_NODE = "18"
