@@ -337,7 +337,8 @@ async function generateFortuneContent(question, context, type, systemPrompt) {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (compatible; BaziBot/1.0)'
         }
       },
       {

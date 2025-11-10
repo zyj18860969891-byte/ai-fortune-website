@@ -13,9 +13,9 @@ startCommand = "node start-railway-native.js"
 
 [environments.production]
 NODE_ENV = "production"
-PORT = "10000"
+PORT = "8080"
 
 # 强制使用 Node.js 18 和指定端口
 [build.environment]
 NIXPACKS_NODE = "18"
-PORT = "10000"
+PORT = "8080"
