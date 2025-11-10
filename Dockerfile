@@ -1,34 +1,19 @@
-# 使用官方Node.js 18镜像FROM node:18
-
+# 使用官方Node.js 18镜像
 FROM node:18-alpine
 
+# 设置工作目录
 WORKDIR /app
 
-# 设置工作目录
-
-WORKDIR /app# Install dependencies
-
-COPY backend/package*.json ./
-
-# 复制package.json和package-lock.jsonRUN npm install
-
+# 复制根目录的package.json
 COPY package*.json ./
 
-# Copy source code
-
-# 安装依赖COPY backend/ ./
-
+# 安装根目录依赖
 RUN npm install --production
 
-# Expose port
+# 复制前端文件
+COPY frontend/ ./frontend/
 
-# 复制整个项目EXPOSE 8080
-
-COPY . .
-
-# Start command
-
-# 构建前端CMD ["node", "dist/simple-test-server.js"]
+# 在前端目录安装依赖并构建
 RUN cd frontend && npm install && npm run build
 
 # 暴露端口
