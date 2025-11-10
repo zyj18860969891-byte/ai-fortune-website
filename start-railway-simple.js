@@ -85,6 +85,12 @@ async function generateFortuneContent(type, question, context, sessionId) {
 
 请用中文回答，格式清晰，内容详细。`;
 
+    console.log('🚀 开始调用 ModelScope API...');
+    console.log('📋 API URL: https://api.modelscope.cn/v1/chat/completions');
+    console.log('🤖 模型:', modelId);
+    console.log('🔑 Token 长度:', modelscopeToken.length);
+    console.log('💬 提示词:', prompt);
+
     // 调用 ModelScope API
     const response = await fetch(`https://api.modelscope.cn/v1/chat/completions`, {
       method: 'POST',
@@ -111,12 +117,20 @@ async function generateFortuneContent(type, question, context, sessionId) {
       })
     });
 
+    console.log('📡 API 响应状态:', response.status, response.statusText);
+
     if (!response.ok) {
-      throw new Error(`ModelScope API 调用失败: ${response.status}`);
+      const errorText = await response.text();
+      console.error('❌ API 调用失败:', response.status, response.statusText);
+      console.error('❌ 错误详情:', errorText);
+      throw new Error(`ModelScope API 调用失败: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log('✅ API 调用成功，响应数据:', JSON.stringify(data, null, 2));
+
     const aiContent = data.choices?.[0]?.message?.content || '抱歉，暂时无法提供八字分析。';
+    console.log('🤖 AI 生成的内容:', aiContent);
 
     return {
       type: 'bazi',
@@ -130,7 +144,8 @@ ${aiContent}
     };
 
   } catch (error) {
-    console.error('AI调用失败:', error);
+    console.error('❌ AI调用失败:', error);
+    console.error('❌ 错误堆栈:', error.stack);
     
     // 降级到模拟响应
     return {
