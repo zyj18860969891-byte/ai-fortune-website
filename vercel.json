@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd frontend && npm install && npx vite build",
+  "buildCommand": "echo 'Using pre-built frontend - no build needed'",
   "outputDirectory": "frontend/dist",
-  "installCommand": "cd frontend && npm install",
-  "framework": "vite"
+  "installCommand": "echo 'No install needed for pre-built frontend'",
+  "framework": "static"
 }
