@@ -24,13 +24,15 @@ app.use((0, morgan_1.default)('combined')); // 请求日志
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 // 静态文件服务 - 提供前端页面
-app.use(express_1.default.static(path_1.default.join(__dirname, '../dist')));
+// 从 backend/dist 指向根目录的 dist
+const frontendDistPath = path_1.default.join(__dirname, '../../dist');
+app.use(express_1.default.static(frontendDistPath));
 // SPA路由支持 - 所有非API路由返回index.html
 app.get('*', (req, res, next) => {
     if (req.url.startsWith('/api/')) {
         return next();
     }
-    res.sendFile(path_1.default.join(__dirname, '../dist/index.html'));
+    res.sendFile(path_1.default.join(frontendDistPath, 'index.html'));
 });
 // 路由配置
 app.use('/api/fortune', fortune_1.default);
