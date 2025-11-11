@@ -187,7 +187,7 @@ router.post('/chat', async (req: Request, res: Response) => {
             console.log('📊 MCP服务调用结果:', baziResult);
             
             if (baziResult.success) {
-              // 解析MCP返回的八字数据 - 修复解析路径
+              // 解析MCP返回的八字数据 - 增强解析逻辑处理格式异常
               try {
                 console.log('📄 MCP原始响应:', baziResult);
                 console.log('🔍 检查baziResult.data:', baziResult.data);
@@ -201,25 +201,55 @@ router.post('/chat', async (req: Request, res: Response) => {
                   '是否为数组': Array.isArray(baziResult.data),
                   '是否为null': baziResult.data === null,
                   '是否为undefined': baziResult.data === undefined,
-                  '是否有八字属性': baziResult.data && '八字' in baziResult.data,
+                  '是否有八字属性': baziResult.data && ('八字' in baziResult.data || '八字' in (baziResult.data.八字 || {})),
                   '是否有生肖属性': baziResult.data && '生肖' in baziResult.data,
                   '是否有日主属性': baziResult.data && '日主' in baziResult.data
                 });
                 
-                // 更宽松的条件检查
+                // 增强的条件检查 - 处理格式异常情况
                 if (baziResult.data && 
                     typeof baziResult.data === 'object' && 
-                    !Array.isArray(baziResult.data) && 
-                    (baziResult.data.八字 || baziResult.data['八字'])) {
-                  baziData = baziResult.data;
-                  analysisType = 'bazi-enhanced';
-                  console.log('✅ 聊天模式八字MCP计算成功');
-                  console.log('📊 八字数据:', {
-                    '八字': baziData.八字,
-                    '生肖': baziData.生肖,
-                    '日主': baziData.日主,
-                    '阳历': baziData.阳历
-                  });
+                    !Array.isArray(baziResult.data)) {
+                  
+                  // 检查是否有八字相关数据（支持多种格式）- 修复检查逻辑
+                  const hasBaziData = (
+                    baziResult.data && '八字' in baziResult.data ||
+                    baziResult.data && '八字' in (baziResult.data.八字 || {}) ||
+                    baziResult.data && baziResult.data.八字 ||
+                    baziResult.data && baziResult.data['八字'] ||
+                    (baziResult.data && baziResult.data.data && '八字' in baziResult.data.data) ||
+                    (baziResult.data && baziResult.data.content && typeof baziResult.data.content === 'string' && baziResult.data.content.includes('八字'))
+                  );
+                  
+                  if (hasBaziData) {
+                    // 处理嵌套数据结构
+                    if (baziResult.data.data && baziResult.data.data.八字) {
+                      baziData = baziResult.data.data;
+                    } else if (baziResult.data.content && typeof baziResult.data.content === 'string') {
+                      try {
+                        // 尝试解析content中的JSON
+                        const parsedContent = JSON.parse(baziResult.data.content);
+                        baziData = parsedContent;
+                      } catch {
+                        // 如果解析失败，直接使用原始data
+                        baziData = baziResult.data;
+                      }
+                    } else {
+                      baziData = baziResult.data;
+                    }
+                    
+                    analysisType = 'bazi-enhanced';
+                    console.log('✅ 聊天模式八字MCP计算成功');
+                    console.log('📊 八字数据:', {
+                      '八字': baziData.八字,
+                      '生肖': baziData.生肖,
+                      '日主': baziData.日主,
+                      '阳历': baziData.阳历
+                    });
+                  } else {
+                    console.log('⚠️ MCP返回数据中没有找到八字相关信息');
+                    baziData = null;
+                  }
                 } else if (baziResult.content) {
                   // 如果content字段存在，尝试解析为JSON
                   try {
@@ -385,7 +415,17 @@ ${Object.entries(baziData.神煞 || {}).map(([key, value]: [string, any]) =>
       success: true,
       response: result.prediction,
       source: result.source,
-      hasBaziData: !!(baziData && baziData.八字 && baziData.日主), // 只有当有完整的八字数据时才为true
+      hasBaziData: !!(baziData && (
+        baziData.八字 || 
+        baziData['八字'] || 
+        baziData.生肖 || 
+        baziData.日主 ||
+        baziData.阳历 ||
+        baziData.农历 ||
+        (baziData.data && baziData.data.八字) ||
+        (baziData.data && baziData.data.生肖) ||
+        (baziData.data && baziData.data.日主)
+      )), // 只要包含八字相关信息就为true
       timestamp: new Date().toISOString()
     };
     
@@ -512,8 +552,8 @@ function extractBirthDataFromQuestion(question: string): any {
   
   console.log('🔍 开始从问题中提取出生日期:', question);
   
-  // 过滤掉明显不是出生信息的输入
-  const invalidInputs = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  // 过滤掉明显不是出生信息的输入 - 修复过于严格的过滤
+  const invalidInputs = ['', ' ', '测试', '随便', '随便看看', '算命', '占卜', '你好', '您好', 'hi', 'hello'];
   const trimmedQuestion = question.trim();
   if (invalidInputs.includes(trimmedQuestion)) {
     console.log('⚠️ 输入内容不是有效的出生信息:', trimmedQuestion);
