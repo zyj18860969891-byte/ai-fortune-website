@@ -2,18 +2,21 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node start-railway-full-stack.js"
+startCommand = "node start-railway-js-only.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 
 [build.nixpacks]
-buildCommand = "npm install && cd backend && npm install && npm run build"
-installCommand = "npm install && cd backend && npm install"
-startCommand = "node start-railway-full-stack.js"
+buildCommand = "npm install"
+installCommand = "npm install"
+startCommand = "node start-railway-js-only.js"
 
 [environments.production]
 NODE_ENV = "production"
 PORT = "8080"
+# ModelScope配置
+MODELSCOPE_TOKEN = "ms-bf1291c1-c1ed-464c-b8d8-162fdee96180"
+MODELSCOPE_MODEL_ID = "Qwen/Qwen3-235B-A22B-Instruct-2507"
 
 # 强制使用 Node.js 18 和指定端口
 [build.environment]
