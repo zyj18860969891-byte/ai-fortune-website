@@ -27,8 +27,126 @@ app.use((req, res, next) => {
 // 静态前端文件服务
 app.use(express.static(path.join(__dirname, 'dist')));
 
-// 全局出生日期缓存
+// 全局出生日期缓存，用于跨请求保存出生信息
 const birthDataCache = new Map();
+
+// 从上下文提取并缓存出生日期的函数
+function extractAndCacheBirthData(context, sessionId) {
+  if (!context) return null;
+  
+  console.log('🔍 开始从上下文提取出生数据，context长度:', context.length);
+  
+  // 方法1：从上下文中提取用户提供的出生日期（不提取占卜师的回复）
+  const userMessages = Array.isArray(context) ? context.filter(msg => msg && msg.type === 'user') : [];
+  
+  console.log('🔍 提取到的用户消息数量:', userMessages.length);
+  
+  let birthData = null;
+  
+  // 首先尝试从用户消息中提取
+  for (const message of userMessages) {
+    if (message && message.content) {
+      const extractedData = extractBirthDataFromQuestion(message.content);
+      if (extractedData) {
+        birthData = extractedData;
+        console.log('✅ 从用户消息成功提取出生数据:', birthData);
+        break;
+      }
+    }
+  }
+  
+  // 方法2：如果从用户消息中没有找到，尝试从整个context中搜索
+  if (!birthData && typeof context === 'string') {
+    console.log('🔍 从用户消息中未找到出生数据，尝试从整个context搜索');
+    const extractedData = extractBirthDataFromQuestion(context);
+    if (extractedData) {
+      birthData = extractedData;
+      console.log('✅ 从整个context成功提取出生数据:', birthData);
+    }
+  }
+  
+  // 方法3：尝试从占卜师的回复中提取（如果用户在回复中提到了出生日期）
+  if (!birthData && Array.isArray(context)) {
+    console.log('🔍 从context和用户消息中未找到出生数据，尝试从占卜师回复中提取');
+    const fortuneMessages = context.filter(msg => 
+      msg && msg.content && (msg.content.includes('八字') || msg.content.includes('阳历') || msg.content.includes('农历'))
+    );
+    
+    for (const message of fortuneMessages) {
+      if (message && message.content) {
+        const extractedData = extractBirthDataFromQuestion(message.content);
+        if (extractedData) {
+          birthData = extractedData;
+          console.log('✅ 从占卜师回复成功提取出生数据:', birthData);
+          break;
+        }
+      }
+    }
+  }
+  
+  // 如果找到出生数据，缓存它
+  if (birthData && sessionId) {
+    birthDataCache.set(sessionId, birthData);
+    console.log('🔧 缓存出生数据:', { sessionId, birthData });
+  }
+  
+  return birthData;
+}
+
+// 从问题中提取出生日期
+function extractBirthDataFromQuestion(question) {
+  if (!question) return null;
+  
+  const patterns = [
+    // 标准格式：1996.02.10 或 1996-02-10 或 1996/02/10
+    /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    // 中文格式：1996年2月10日
+    /(\d{4})年(\d{1,2})月(\d{1,2})日/g,
+    // 紧凑格式：19960210 (8位数字)
+    /(\d{4})(\d{2})(\d{2})/g,
+    // 出生于格式
+    /出生于.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = pattern.exec(question);
+    if (match) {
+      let year, month, day;
+      
+      if (pattern.source.includes('出生于')) {
+        // 出生于格式的处理
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      } else if (pattern.source.includes('(\d{4})(\d{2})(\d{2})')) {
+        // 紧凑格式的处理：19960210
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      } else {
+        // 标准格式的处理
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      }
+      
+      // 驗证日期的合理性
+      if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return {
+          year,
+          month,
+          day,
+          hour: 0,
+          minute: 0,
+          gender: 'male',
+          timezone: 'Asia/Shanghai'
+        };
+      }
+    }
+  }
+  
+  return null;
+}
 
 // 从问题中提取出生日期
 function extractBirthDate(question) {
@@ -71,8 +189,8 @@ function extractBirthDate(question) {
 }
 
 // 智能本地八字分析生成
-function generateIntelligentBaziResponse(question, birthDate) {
-  if (!birthDate) {
+function generateIntelligentBaziResponse(question, birthData) {
+  if (!birthData) {
     return `🔮 八字命理分析
 
 您好！要进行准确的八字分析，请提供您的出生日期（格式：1990.05.15 或 1990年5月15日），这样我才能为您进行专业的命理分析。
@@ -87,12 +205,14 @@ function generateIntelligentBaziResponse(question, birthDate) {
   }
   
   // 解析出生日期
-  const year = parseInt(birthDate.match(/^(\d{4})/)[1]);
-  const month = parseInt(birthDate.match(/[\.\年](\d{1,2})/)[1]);
-  const day = parseInt(birthDate.match(/[\.\月](\d{1,2})/)[1]);
+  const year = birthData.year;
+  const month = birthData.month;
+  const day = birthData.day;
   
   // 基于日期的特征分析
+  const yearParity = year % 2;
   const monthSeason = month <= 3 ? '春' : month <= 6 ? '夏' : month <= 9 ? '秋' : '冬';
+  const dayParity = day % 2;
   
   // 生成个性化分析
   const personalityTraits = [
@@ -134,7 +254,7 @@ function generateIntelligentBaziResponse(question, birthDate) {
 - 多与朋友和同事交流合作
 - 注意健康管理，避免过度劳累`;
   } else if (question.includes('事业') || question.includes('工作')) {
-    focusedAnalysis = `💼 **事业运势详解**：
+    focused游戏副本 = `💼 **事业运势详解**：
 ${careerOptions[Math.floor(Math.random() * careerOptions.length)]}。您的事业运势较为稳定，具有${personalityTraits[Math.floor(Math.random() * personalityTraits.length)]}的特质。
 
 🚀 **发展建议**：
@@ -144,7 +264,7 @@ ${careerOptions[Math.floor(Math.random() * careerOptions.length)]}。您的事�
 - 考虑在领导或协调岗位上发展`;
   } else if (question.includes('感情') || question.includes('爱情') || question.includes('婚姻')) {
     focusedAnalysis = `💕 **感情婚姻分析**：
-${birthDate} 出生的您，感情运势良好。单身者有机会遇到心仪的对象，已有伴侣者感情稳定。
+${birthData.year}年${birthData.month}月${birthData.day}日出生的您，感情运势良好。单身者有机会遇到心仪的对象，已有伴侣者感情稳定。
 
 💫 **感情建议**：
 - 多参与社交活动，扩展交际圈
@@ -156,7 +276,7 @@ ${birthDate} 出生的您，感情运势良好。单身者有机会遇到心仪�
 ${fortuneAspects[Math.floor(Math.random() * fortuneAspects.length)]}。${fortuneAspects[Math.floor(Math.random() * fortuneAspects.length)]}。`;
   }
   
-  return `🔮 八字命理分析（基于出生日期：${birthDate}）：
+  return `🔮 八字命理分析（基于出生日期：${birthData.year}.${birthData.month.toString().padStart(2, '0')}.${birthData.day.toString().padStart(2, '0')}）：
 
 🌟 **性格特质**：
 ${personalityTraits[Math.floor(Math.random() * personalityTraits.length)]}。${personalityTraits[Math.floor(Math.random() * personalityTraits.length)]}。
@@ -221,19 +341,50 @@ app.post('/api/fortune/chat', async (req, res) => {
     }
 
     console.log(`🔮 AI占卜请求 - 类型: ${type}, 问题: ${question}, 会话ID: ${sessionId}`);
+    console.log(`📝 上下文信息:`, context);
     
-    // 提取并缓存出生日期
-    const birthDate = extractBirthDate(question);
-    console.log('🎯 提取的出生日期:', birthDate);
+    // 尝试从上下文提取出生日期并缓存
+    let birthData = null;
+    if (context) {
+      const contextBirthData = extractAndCacheBirthData(context, sessionId);
+      if (contextBirthData) {
+        birthData = contextBirthData;
+        console.log('✅ 从上下文提取出生数据:', birthData);
+      }
+    }
+    
+    // 如果当前请求没有出生数据，尝试从缓存获取
+    if (!birthData && sessionId) {
+      const cachedBirthData = birthDataCache.get(sessionId);
+      if (cachedBirthData) {
+        birthData = cachedBirthData;
+        console.log('🔧 从缓存获取出生数据:', { sessionId, birthData });
+      }
+    }
+    
+    // 如果还没有出生数据，尝试从当前问题中提取
+    if (!birthData) {
+      birthData = extractBirthDataFromQuestion(question);
+      if (birthData) {
+        console.log('✅ 从问题中提取出生数据:', birthData);
+        // 如果从问题中提取到，也缓存它
+        if (sessionId) {
+          birthDataCache.set(sessionId, birthData);
+          console.log('🔧 缓存从问题中提取的出生数据:', { sessionId, birthData });
+        }
+      }
+    }
+    
+    console.log('🎯 最终出生数据:', birthData);
     
     // 直接生成智能本地响应
-    const intelligentResponse = generateIntelligentBaziResponse(question, birthDate);
+    const intelligentResponse = generateIntelligentBaziResponse(question, birthData);
     
     res.json({
       success: true,
       response: intelligentResponse,
       source: 'intelligent-js-analyzer',
-      hasBaziData: !!birthDate,
+      hasBaziData: !!birthData,
       timestamp: new Date().toISOString()
     });
     
