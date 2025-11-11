@@ -194,7 +194,23 @@ router.post('/chat', async (req: Request, res: Response) => {
                 console.log('🔍 检查baziResult.content:', baziResult.content);
                 
                 // MCP服务返回的数据结构：{ success: true, data: { 八字, 生肖, 日主, ... } }
-                if (baziResult.data && typeof baziResult.data === 'object') {
+                console.log('🔍 详细检查baziResult.data:', {
+                  '存在': !!baziResult.data,
+                  '类型': typeof baziResult.data,
+                  '是否为对象': typeof baziResult.data === 'object',
+                  '是否为数组': Array.isArray(baziResult.data),
+                  '是否为null': baziResult.data === null,
+                  '是否为undefined': baziResult.data === undefined,
+                  '是否有八字属性': baziResult.data && '八字' in baziResult.data,
+                  '是否有生肖属性': baziResult.data && '生肖' in baziResult.data,
+                  '是否有日主属性': baziResult.data && '日主' in baziResult.data
+                });
+                
+                // 更宽松的条件检查
+                if (baziResult.data && 
+                    typeof baziResult.data === 'object' && 
+                    !Array.isArray(baziResult.data) && 
+                    (baziResult.data.八字 || baziResult.data['八字'])) {
                   baziData = baziResult.data;
                   analysisType = 'bazi-enhanced';
                   console.log('✅ 聊天模式八字MCP计算成功');
@@ -215,8 +231,21 @@ router.post('/chat', async (req: Request, res: Response) => {
                     baziData = null;
                   }
                 } else {
-                  console.log('⚠️ MCP返回数据格式异常:', baziResult);
-                  baziData = null;
+                  console.log('⚠️ MCP返回数据格式异常，尝试直接使用data字段:', baziResult);
+                  // 备用逻辑：如果检查失败，直接尝试使用data字段
+                  if (baziResult.data && typeof baziResult.data === 'object') {
+                    baziData = baziResult.data;
+                    analysisType = 'bazi-enhanced';
+                    console.log('✅ 使用备用逻辑成功设置八字数据');
+                    console.log('📊 备用八字数据:', {
+                      '八字': baziData.八字,
+                      '生肖': baziData.生肖,
+                      '日主': baziData.日主,
+                      '阳历': baziData.阳历
+                    });
+                  } else {
+                    baziData = null;
+                  }
                 }
                 
                 console.log('🔍 最终baziData值:', baziData);
