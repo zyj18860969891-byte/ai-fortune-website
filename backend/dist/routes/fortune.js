@@ -12,10 +12,10 @@ function extractAndCacheBirthData(context, sessionId) {
     if (!context)
         return null;
     console.log('🔍 开始从上下文提取出生数据，context长度:', context.length);
-    // 方法1：从上下文中提取用户提供的出生日期（不提取占卜师的回复）
+    let birthData = null;
+    // 方法1：从上下文中提取用户提供的出生日期
     const userMessages = context.split('\n').filter(line => line.startsWith('用户:') && !line.includes('占卜师:'));
     console.log('🔍 提取到的用户消息:', userMessages);
-    let birthData = null;
     // 首先尝试从用户消息中提取
     for (const message of userMessages) {
         const match = message.match(/用户:\s*(.+)/);
@@ -86,6 +86,7 @@ router.post('/chat', async (req, res) => {
             const contextBirthData = extractAndCacheBirthData(requestData.context, requestData.sessionId);
             if (contextBirthData) {
                 birthData = contextBirthData;
+                console.log('🔍 从上下文提取到出生数据:', birthData);
             }
         }
         // 如果当前请求没有出生数据，尝试从缓存获取
@@ -111,6 +112,7 @@ router.post('/chat', async (req, res) => {
                         const contextBirthData = extractAndCacheBirthData(requestData.context, requestData.sessionId);
                         if (contextBirthData) {
                             birthData = contextBirthData;
+                            console.log('🔍 从上下文提取到出生数据:', birthData);
                         }
                     }
                     // 尝试从缓存获取
@@ -240,12 +242,15 @@ ${Object.entries(baziData.神煞 || {}).map(([key, value]) => `${key}：${Array.
         }
         console.log('🔍 调试信息:', {
             enhancedQuestion,
-            context: requestData.context,
+            context: requestData.context?.substring(0, 200) + '...',
             type: requestData.type,
             systemPrompt,
             baziData: !!baziData
         });
-        const result = await realModelService.generateFortune(enhancedQuestion, requestData.context, requestData.type, systemPrompt);
+        // 限制上下文长度，避免超长请求
+        const limitedContext = requestData.context ?
+            requestData.context.substring(0, 2000) : '';
+        const result = await realModelService.generateFortune(enhancedQuestion, limitedContext, requestData.type, systemPrompt);
         const endTime = Date.now();
         console.log('🎯 AI分析结果详情:', {
             'success': result.success,
@@ -378,6 +383,7 @@ function extractBirthDataFromContext(context) {
 function extractBirthDataFromQuestion(question) {
     if (!question)
         return null;
+    console.log('🔍 开始从问题中提取出生日期:', question);
     const patterns = [
         // 标准格式：1996.02.10 或 1996-02-10 或 1996/02/10
         /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
@@ -387,6 +393,10 @@ function extractBirthDataFromQuestion(question) {
         /(\d{4})(\d{2})(\d{2})/g,
         // 出生于格式
         /出生于.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+        // 其他可能的格式
+        /(\d{4})年(\d{1,2})月(\d{1,2})/g,
+        /(\d{4})年(\d{1,2})月(\d{1,2})时/g,
+        /(\d{4})年(\d{1,2})月(\d{1,2})分/g,
     ];
     for (const pattern of patterns) {
         const match = pattern.exec(question);
@@ -412,6 +422,7 @@ function extractBirthDataFromQuestion(question) {
             }
             // 验证日期的合理性
             if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                console.log('✅ 成功提取出生日期:', { year, month, day });
                 return {
                     year,
                     month,
@@ -424,6 +435,7 @@ function extractBirthDataFromQuestion(question) {
             }
         }
     }
+    console.log('⚠️ 未从问题中找到有效的出生日期');
     return null;
 }
 exports.default = router;

@@ -36,21 +36,32 @@ class RealModelScopeOnlineService {
     }
     formatHumanLikeResponse(aiResponse, question) {
         let cleanResponse = aiResponse.trim().replace(/^["']|["']$/g, '');
-        // 过滤思考过程
+        
+        // 移除思考过程标记
         const thinkingPatterns = [
             /\*\*拆解请求\*\*[\s\S]*?(?=\*\*|$)/g,
             /\*\*分析用户输入\*\*[\s\S]*?(?=\*\*|$)/g,
-            /\*\*核心要求\*\*[\s\S]*?(?=\*\*|$)/g
+            /\*\*核心要求\*\*[\s\S]*?(?=\*\*|$)/g,
+            /思考过程：[\s\S]*?(?=分析结果|$)/g,
+            /分析思路：[\s\S]*?(?=最终答案|$)/g
         ];
         for (const pattern of thinkingPatterns) {
             cleanResponse = cleanResponse.replace(pattern, '');
         }
-        // 清理重复的问候语和祝福语
+        
+        // 清理多余的空行和重复内容
         cleanResponse = this.removeDuplicates(cleanResponse);
-        // 确保以问候语开头
-        if (!cleanResponse.startsWith('👋') && !cleanResponse.startsWith('😊')) {
-            cleanResponse = '👋 您好，朋友！让我来为您详细分析一下...\n\n' + cleanResponse;
+        
+        // 确保有专业的开头
+        if (!cleanResponse.match(/^(👋|😊|您好|朋友)/)) {
+            cleanResponse = '👋 您好，朋友！很高兴为您分析。\n\n' + cleanResponse;
         }
+        
+        // 确保有自然的结尾
+        if (!cleanResponse.match(/(🌟|💕|💪|🙏|祝您|希望)/)) {
+            cleanResponse += '\n\n🌟 愿您的生活充满阳光和喜悦！';
+        }
+        
         return {
             prediction: cleanResponse,
             advice: '保持积极心态，顺势而为',
@@ -194,22 +205,22 @@ class RealModelScopeOnlineService {
             messages: [
                 {
                     role: 'system',
-                    content: '你是一位专业的AI算命师，精通塔罗牌、八字命理、星座占星和数字命理。'
+                    content: '你是一位专业的AI算命师，精通塔罗牌、八字命理、星座占星和数字命理。请直接给出专业、自然、流畅的分析结果，不要显示思考过程。'
                 },
                 {
                     role: 'user',
                     content: prompt
                 }
             ],
-            temperature: 0.7,
-            max_tokens: 800
+            temperature: 0.8,
+            max_tokens: 1200
         };
         const response = await axios_1.default.post(`${this.config.baseUrl}/chat/completions`, requestPayload, {
             headers: {
                 'Authorization': `Bearer ${this.config.apiKey}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 30000
+            timeout: 90000  // 增加到90秒
         });
         const choice = response.data.choices?.[0]?.message;
         const generatedText = choice?.content || choice?.reasoning_content || response.data.output?.text || '';
@@ -219,30 +230,44 @@ class RealModelScopeOnlineService {
         return generatedText;
     }
     buildIntelligentPrompt(question, context, customSystemPrompt) {
-        return `你是一位专业的命理师，名字叫"慧心"。请直接给出分析结果，不要显示思考过程。
+        // 只保留必要的上下文，避免重复历史
+        const cleanContext = this.cleanContext(context);
+        
+        let basePrompt = customSystemPrompt || `你是一位专业的命理师，名字叫"慧心"。请直接给出专业、自然、流畅的分析结果，不要显示思考过程。`;
+        
+        if (cleanContext) {
+            basePrompt += `\n\n相关背景信息：${cleanContext}`;
+        }
+        
+        return `${basePrompt}
 
 用户问题：${question}
 
-直接输出最终分析结果，格式如下：
-
-👋 您好，朋友！让我来为您详细分析一下...
-
-🌟 性格特点
-您是一个性格温和、富有智慧的人，总是能够以积极的态度面对生活中的各种挑战。
-
-💪 人生优势
-您拥有很强的适应能力和坚韧不拔的意志。
-
-⚠️ 注意事项
-在重要决策时，建议多思考一下再做决定。
-
-💡 实用建议
-保持积极的心态，多与朋友交流分享您的想法。
-
-🌸 温馨祝福
-愿您的人生路越走越宽，有任何问题随时来找我聊！🌟
-
-记住：绝对不要显示思考过程，直接输出最终结果。`;
+请直接输出专业、自然、流畅的分析结果，不要显示任何思考过程。`;
+    }
+    
+    cleanContext(context) {
+        if (!context) return '';
+        
+        // 移除重复的system prompt和占卜师回复
+        const lines = context.split('\n');
+        const userMessages = [];
+        let inUserMessage = false;
+        
+        for (const line of lines) {
+            if (line.startsWith('用户:')) {
+                inUserMessage = true;
+                userMessages.push(line.substring(3).trim());
+            } else if (line.startsWith('占卜师:')) {
+                inUserMessage = false;
+            } else if (inUserMessage) {
+                userMessages.push(line.trim());
+            }
+        }
+        
+        // 只保留最近的2-3条用户消息
+        const recentMessages = userMessages.slice(-3);
+        return recentMessages.length > 0 ? recentMessages.join('。') : '';
     }
     async healthCheck() {
         try {

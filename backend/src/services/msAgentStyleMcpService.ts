@@ -121,23 +121,58 @@ export class MsAgentStyleMcpService {
         url: serverConfig.url
       });
 
-      // 使用Client调用工具（ms-agent方式）
-      const response = await session.callTool({ name: toolName, arguments: toolArgs });
+      // 使用正确的MCP工具调用方式
+      const response = await session.callTool({
+        name: toolName,
+        arguments: toolArgs
+      });
 
-      console.log('📊 Bazi MCP响应状态:', response);
+      console.log('📊 Bazi MCP响应状态:', {
+        isError: response.isError,
+        content: response.content,
+        contentType: typeof response.content,
+        hasContent: !!response.content
+      });
 
       if (!response.isError) {
         console.log('✅ Bazi MCP工具调用成功');
+        
+        // 正确解析响应内容
+        let content = '';
+        if (Array.isArray(response.content)) {
+          content = response.content.map((c: any) => {
+            if (c?.text) return c.text;
+            if (typeof c === 'string') return c;
+            return JSON.stringify(c);
+          }).join('\n');
+        } else if (response.content && typeof response.content === 'object' && 'text' in response.content) {
+          content = (response.content as any).text;
+        } else if (typeof response.content === 'string') {
+          content = response.content;
+        } else if (response.content) {
+          content = JSON.stringify(response.content);
+        }
+        
         return {
           success: true,
-          content: Array.isArray(response.content) ? response.content.map((c: any) => c?.text || '').join('\n') : '',
+          content: content,
           data: response
         };
       } else {
         console.error('❌ Bazi MCP工具调用失败:', response.content);
+        
+        let errorMsg = '未知错误';
+        if (Array.isArray(response.content)) {
+          errorMsg = response.content.map((c: any) => c?.text || '').join('\n');
+        } else if (response.content && typeof response.content === 'object' && 'text' in response.content) {
+          errorMsg = (response.content as any).text;
+        } else if (typeof response.content === 'string') {
+          errorMsg = response.content;
+        }
+        
         return {
           success: false,
-          error: `工具调用失败: ${Array.isArray(response.content) ? response.content.map((c: any) => c?.text || '').join('\n') : '未知错误'}`
+          error: `工具调用失败: ${errorMsg}`
         };
       }
       
@@ -199,17 +234,21 @@ export class MsAgentStyleMcpService {
     try {
       console.log(`📡 [ms-agent] 连接到MCP服务器: ${serverName}`);
       
-      // 检查是否已有连接
+      // 检查是否已有有效连接
       if (this.sessions.has(serverName)) {
         const existingClient = this.sessions.get(serverName);
         if (existingClient) {
-          console.log('📡 [ms-agent] 使用现有会话');
-          return existingClient;
+          try {
+            // 验证现有会话是否有效
+            await existingClient.listTools();
+            console.log('📡 [ms-agent] 使用现有会话');
+            return existingClient;
+          } catch (error) {
+            console.log('📡 [ms-agent] 现有会话无效，清除后重连');
+            this.sessions.delete(serverName);
+          }
         }
       }
-      
-      // 如果有现有会话但无效，清除它
-      this.sessions.delete(serverName);
 
       // 使用streamable_http传输方式（ms-agent默认方式）
       const transport = new StreamableHTTPClientTransport(
@@ -333,39 +372,88 @@ export class MsAgentStyleMcpService {
       // 根据八字MCP文档准备参数
       const baziArgs = this.prepareBaziArgs(birthData);
       
+      console.log('📋 准备Bazi MCP参数:', baziArgs);
+      
       // 使用正确的工具名称getBaziDetail
       const result = await this.callTool('Bazi-MCP', 'getBaziDetail', baziArgs);
 
       if (result.success) {
         console.log('✅ Bazi MCP计算成功');
-        // 解析MCP返回的JSON数据
-        let parsedData = result.data;
-        if (typeof parsedData === 'string') {
+        console.log('📄 原始响应内容:', result.content);
+        
+        // 更健壮的数据解析
+        let parsedData = null;
+        
+        // 1. 先尝试从content字段解析
+        if (result.content) {
           try {
-            parsedData = JSON.parse(parsedData);
-            console.log('📊 解析后的Bazi数据结构:', {
-              hasDayMaster: !!parsedData.日主,
-              dayMaster: parsedData.日主,
-              keys: Object.keys(parsedData)
+            parsedData = JSON.parse(result.content);
+            console.log('📊 从content字段解析成功:', {
+              hasDayMaster: !!parsedData?.日主,
+              dayMaster: parsedData?.日主,
+              keys: Object.keys(parsedData || {})
             });
           } catch (e) {
-            console.warn('⚠️ 解析MCP返回数据失败:', e);
+            console.log('⚠️ content字段JSON解析失败，尝试直接使用:', (e as Error).message);
+            // 如果content本身就是对象，直接使用
+            if (typeof result.content === 'object') {
+              parsedData = result.content;
+            } else {
+              // 否则作为普通文本返回
+              parsedData = { content: result.content };
+            }
           }
         }
+        
+        // 2. 如果content解析失败，尝试从data字段解析
+        if (!parsedData && result.data) {
+          try {
+            if (typeof result.data === 'string') {
+              parsedData = JSON.parse(result.data);
+            } else {
+              parsedData = result.data;
+            }
+            console.log('📊 从data字段解析成功:', {
+              hasDayMaster: !!parsedData?.日主,
+              dayMaster: parsedData?.日主,
+              keys: Object.keys(parsedData || {})
+            });
+          } catch (e) {
+            console.warn('⚠️ data字段解析也失败:', e);
+            parsedData = result.data;
+          }
+        }
+        
+        // 3. 如果都失败了，构造一个基本的响应结构
+        if (!parsedData) {
+          console.warn('⚠️ 所有解析都失败，使用默认结构');
+          parsedData = {
+            八字: '计算失败',
+            日主: '未知',
+            错误信息: result.content || result.error || '未知错误',
+            rawResponse: result
+          };
+        }
+        
         return {
           success: true,
           data: parsedData
         };
       } else {
         console.warn('⚠️ Bazi MCP计算失败:', result.error);
-        return result;
+        return {
+          success: false,
+          error: result.error,
+          data: null
+        };
       }
       
     } catch (error: any) {
       console.error('❌ Bazi MCP计算异常:', error.message);
       return {
         success: false,
-        error: error.message
+        error: error.message,
+        data: null
       };
     }
   }
