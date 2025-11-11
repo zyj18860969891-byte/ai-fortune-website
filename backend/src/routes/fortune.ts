@@ -546,17 +546,31 @@ function extractBirthDataFromContext(context: string): any {
       if (match) {
         const question = match[1].trim();
         
-        // 排除明显的非真实出生信息
+        // 排除明显的非真实出生信息 - 增强过滤逻辑
         const excludePatterns = [
-          '出生日期（格式', '格式：', '格式:', '示例', '例子',
-          '1990.05.15', '1990年5月15日', '提供您的', '先提供'
+          '出生日期（格式', '格式：', '格式:', '示例', '例子', '举例',
+          '1990.05.15', '1990年5月15日', '1990-05-15', '1990/05/15',
+          '提供您的', '先提供', '请提供', '需要提供',
+          '要进行准确的', '确认后会为', '确认后',
+          '八字命理AI占卜师', '您好', '我是', '请先',
+          '占卜师:', '您好！', '我是八字', '命理AI'
         ];
         
         const isExcluded = excludePatterns.some(pattern => 
           line.includes(pattern) || question.includes(pattern)
         );
         
-        if (!isExcluded && question.length < 50) { // 真实生辰信息通常较短
+        // 额外检查：如果整条消息看起来像AI的格式说明，则排除
+        const aiFormatIndicators = [
+          '格式：', '格式:', '（格式', '）', '或', '和',
+          '出生日期', '八字分析', '专业分析', '准确分析'
+        ];
+        
+        const isAIFormat = aiFormatIndicators.filter(indicator => 
+          line.includes(indicator) || question.includes(indicator)
+        ).length >= 2; // 至少包含2个AI格式指示词
+        
+        if (!isExcluded && !isAIFormat && question.length < 50) { // 真实生辰信息通常较短
           const birthData = extractBirthDataFromQuestion(question);
           if (birthData) {
             console.log('✅ 从用户消息智能提取出生数据:', birthData);
@@ -573,7 +587,9 @@ function extractBirthDataFromContext(context: string): any {
       line.includes('确认出生日期') || 
       line.includes('已确认') || 
       line.includes('好的，') ||
-      line.includes('明白了，')
+      line.includes('明白了，') ||
+      line.includes('收到') ||
+      line.includes('了解')
     )
   );
   
@@ -587,6 +603,25 @@ function extractBirthDataFromContext(context: string): any {
           console.log('✅ 从AI确认对话中智能提取出生数据:', birthData);
           return birthData;
         }
+      }
+    }
+  }
+  
+  // 方法3：从整个context中搜索，但排除AI格式说明
+  console.log('🔍 从整个context搜索出生数据，排除AI格式示例...');
+  
+  // 排除包含AI格式说明的行
+  const filteredLines = lines.filter(line => {
+    const aiFormatWords = ['格式', '示例', '例子', '举例', '出生日期（格式', '八字命理AI占卜师'];
+    return !aiFormatWords.some(word => line.includes(word));
+  });
+  
+  for (const line of filteredLines) {
+    if (line.includes('用户:') || line.includes('1996') || line.includes('1995') || line.includes('1994') || line.includes('1993') || line.includes('1992') || line.includes('1991') || line.includes('1990') || line.includes('1989') || line.includes('1988')) {
+      const birthData = extractBirthDataFromQuestion(line);
+      if (birthData) {
+        console.log('✅ 从过滤后的context提取出生数据:', birthData);
+        return birthData;
       }
     }
   }
