@@ -30,6 +30,10 @@ app.use(express.static(path.join(__dirname, 'dist')));
 // 如果仓库中存在完整后端的编译输出（backend/dist），优先挂载原始后端路由
 let SKIP_LOCAL_ROUTES = false;
 let SKIP_LOCAL_SERVER = false;
+// 外部完整服务实例（可用时优先使用）
+let USE_FULL_SERVICES = false;
+let mcpService = null;
+let realModelService = null;
 try {
   const useCompleteBackend = process.env.USE_REAL_BACKEND === 'true' || process.env.USE_COMPLETE_BACKEND === 'true' || process.env.USE_BACKEND === 'true';
   if (useCompleteBackend) {
@@ -73,6 +77,36 @@ try {
   }
 } catch (err) {
   console.warn('⚠️ 检查启动完整后端时发生错误:', err && err.message);
+}
+
+// 尝试加载已编译的服务实现（RealModelScopeOnlineService, MsAgentStyleMcpService）
+try {
+  const RealModelScopeModule = require('./backend/dist/services/realModelScopeOnlineService');
+  const MsAgentMcpModule = require('./backend/dist/services/msAgentStyleMcpService');
+  const RealModelScope = RealModelScopeModule && (RealModelScopeModule.RealModelScopeOnlineService || RealModelScopeModule.default || RealModelScopeModule);
+  const MsAgentMcp = MsAgentMcpModule && (MsAgentMcpModule.MsAgentStyleMcpService || MsAgentMcpModule.default || MsAgentMcpModule);
+  if (RealModelScope && MsAgentMcp) {
+    // 默认值（如未设置环境变量则使用你指定的值）
+    const defaultModelId = process.env.MODELSCOPE_MODEL_ID || process.env.MODELSCOPE_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
+    const defaultApiKey = process.env.MODELSCOPE_API_KEY || process.env.MODELSCOPE_TOKEN || 'ms-bf1291c1-c1ed-464c-b8d8-162fdee96180';
+    const modelConfig = {
+      apiKey: defaultApiKey,
+      modelId: defaultModelId,
+      baseUrl: process.env.MODELSCOPE_BASE_URL || 'https://api-inference.modelscope.cn/v1'
+    };
+
+    try {
+      realModelService = new RealModelScope(modelConfig);
+      mcpService = MsAgentMcp.getInstance();
+      USE_FULL_SERVICES = true;
+      console.log('✅ 已实例化完整服务：RealModelScopeOnlineService 与 MsAgentStyleMcpService（将在请求时优先使用）');
+    } catch (err) {
+      console.warn('⚠️ 实例化完整服务失败，回退到本地实现：', err && err.message);
+      USE_FULL_SERVICES = false;
+    }
+  }
+} catch (err) {
+  console.log('ℹ️ 未找到已编译的完整服务（backend/dist/services），将使用本地 JS-only 实现');
 }
 
 // 全局出生日期缓存，用于跨请求保存出生信息
@@ -425,10 +459,78 @@ if (!SKIP_LOCAL_ROUTES) {
     }
     
     console.log('🎯 最终出生数据:', birthData);
-    
-    // 直接生成智能本地响应
+
+    // 如果编译后的完整服务可用，则优先调用 MCP + ModelScope 服务
+    if (USE_FULL_SERVICES && realModelService && mcpService) {
+      try {
+        let baziData = null;
+
+        if (type === 'bazi') {
+          if (birthData) {
+            console.log('🔮 使用 Bazi MCP 计算八字...');
+            const baziResult = await mcpService.calculateBazi(birthData);
+            if (baziResult && baziResult.success) {
+              try {
+                const mcpContent = baziResult.data?.content?.[0]?.text || baziResult.data?.content || baziResult.data;
+                if (typeof mcpContent === 'string') {
+                  baziData = JSON.parse(mcpContent);
+                } else {
+                  baziData = mcpContent;
+                }
+                console.log('✅ Bazi MCP 计算成功，解析八字数据');
+              } catch (e) {
+                console.warn('⚠️ 解析Bazi MCP返回数据失败，使用原始数据', e && e.message);
+                baziData = baziResult.data;
+              }
+            } else {
+              console.warn('⚠️ Bazi MCP 计算未成功，返回信息：', baziResult && baziResult.error);
+            }
+          } else {
+            console.log('⚠️ 请求八字分析但未提供出生信息，跳过 MCP 调用');
+          }
+        }
+
+        // 构建 enhancedQuestion 与 systemPrompt，复用后端逻辑
+        let enhancedQuestion = question;
+        let systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。请输入您的问题，我会为您提供专业的占卜分析和建议。';
+
+        if (!birthData && type === 'bazi') {
+          enhancedQuestion = question;
+          systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。要进行准确的八字分析，请先提供您的出生日期（如：1990.05.15 或 1990年5月15日），然后再告诉我您想了解什么问题。';
+        } else if (baziData) {
+          // 构建精简但完整的八字分析数据给AI
+          const completeBaziInfo = `\n=== 八字专业分析数据 ===\n八字：${baziData.八字 || '未知'}\n日主：${baziData.日主 || '未知'}（${baziData.日柱?.天干?.五行 || '未知'}）\n生肖：${baziData.生肖 || '未知'}\n阳历：${baziData.阳历 || '未知'}\n农历：${baziData.农历 || '未知'}\n`;
+          enhancedQuestion = `${question}\n\n八字：${baziData.八字 || '未知'}\n日主：${baziData.日主 || '未知'}\n生肖：${baziData.生肖 || '未知'}\n农历：${baziData.农历 || '未知'}\n阳历：${baziData.阳历 || '未知'}\n\n请基于以上八字信息，给出自然流畅的命理分析。`;
+          systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。请基于八字数据给出自然流畅的命理分析。';
+        } else if (type === 'bazi') {
+          enhancedQuestion = `${question}\n\n注意：您请求的是八字分析，但未提供出生信息。我将为您提供一般性的占卜分析，建议您提供出生信息以获得更精准的八字分析。`;
+          systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。您请求的是八字分析，但未提供出生信息。我将为您提供一般性的占卜分析，建议您提供出生信息以获得更精准的八字分析。';
+        }
+
+        console.log('🔧 准备调用 ModelScope 生成分析（enhancedQuestion 长度:', enhancedQuestion.length, ')');
+        const result = await realModelService.generateFortune(enhancedQuestion, context, type, systemPrompt);
+
+        const prediction = result && (result.prediction || result);
+
+        console.log('✅ ModelScope 生成完成，返回长度:', (prediction && prediction.length) || 0);
+
+        return res.json({
+          success: true,
+          response: prediction,
+          source: result.source || 'modelscope',
+          hasBaziData: !!baziData,
+          timestamp: new Date().toISOString()
+        });
+
+      } catch (err) {
+        console.error('❌ 使用完整服务时出错，回退到本地实现：', err && err.message);
+        // fallthrough to local fallback
+      }
+    }
+
+    // 直接生成智能本地响应（回退）
     const intelligentResponse = generateIntelligentBaziResponse(question, birthData);
-    
+
     res.json({
       success: true,
       response: intelligentResponse,
