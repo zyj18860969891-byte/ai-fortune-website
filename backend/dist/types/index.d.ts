@@ -10,6 +10,7 @@ export interface FortuneRequest {
         minute: number;
     };
     userId?: string;
+    sessionId?: string;
 }
 export interface FortuneResponse {
     id: string;

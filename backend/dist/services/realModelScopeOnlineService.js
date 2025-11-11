@@ -1,29 +1,38 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RealModelScopeOnlineService = void 0;
-const axios_1 = require("axios");
+const axios_1 = __importDefault(require("axios"));
+const EnhancePromptService_1 = require("./EnhancePromptService");
 class RealModelScopeOnlineService {
     constructor(config) {
         this.conversationHistory = [];
+        this.lastApiCallTime = 0;
+        this.MIN_API_INTERVAL = 3000; // 最小API调用间隔3秒
         this.config = config;
+        this.enhancePromptService = EnhancePromptService_1.EnhancePromptService.getInstance();
         console.log('🎯 RealModelScopeOnlineService 初始化完成');
     }
     async generateFortune(question, context, type, systemPrompt) {
         const startTime = Date.now();
         try {
             console.log('🎯 开始生成命理分析');
-            const prompt = this.buildIntelligentPrompt(question, context, systemPrompt);
-            const apiResult = await this.callModelScopeAPI(prompt);
+            // 直接使用路由传递的完整提示词，不重新构建
+            console.log('🔧 使用完整提示词（包含八字数据）');
+            const apiResult = await this.callModelScopeAPI(question);
             const processingTime = Date.now() - startTime;
-            const formattedResponse = this.formatHumanLikeResponse(apiResult, question);
-            this.conversationHistory.push({ question, response: formattedResponse.prediction });
+            // 简化响应处理，只做基本清理
+            const cleanResponse = this.simplifyResponse(apiResult);
+            this.conversationHistory.push({ question, response: cleanResponse });
             return {
                 success: true,
-                prediction: formattedResponse.prediction,
-                advice: formattedResponse.advice,
-                luckyElements: formattedResponse.luckyElements,
+                prediction: cleanResponse,
+                advice: '保持积极心态，顺势而为',
+                luckyElements: ['绿色', '蓝色', '3', '8'],
                 confidence: 0.92,
-                source: 'real-modelscope-ai-human-like',
+                source: 'real-modelscope-ai-natural',
                 apiStatus: 'success',
                 processingTime,
                 personality: { name: '慧心老师' }
@@ -36,11 +45,29 @@ class RealModelScopeOnlineService {
     }
     formatHumanLikeResponse(aiResponse, question) {
         let cleanResponse = aiResponse.trim().replace(/^["']|["']$/g, '');
-        // 过滤思考过程
+        // 强化思考过程过滤 - 更精确的模式
         const thinkingPatterns = [
-            /\*\*拆解请求\*\*[\s\S]*?(?=\*\*|$)/g,
-            /\*\*分析用户输入\*\*[\s\S]*?(?=\*\*|$)/g,
-            /\*\*核心要求\*\*[\s\S]*?(?=\*\*|$)/g
+            // 只过滤明显的思考过程标记，保留实际内容
+            // 数字编号的思考过程标题行
+            /^\d+\.\s*\*\*拆解用户请求[^*]*\*\*$/gm,
+            /^\d+\.\s*\*\*分析用户输入[^*]*\*\*$/gm,
+            /^\d+\.\s*\*\*核心要求[^*]*\*\*$/gm,
+            // 星号+内容类型的思考过程
+            /^\s*\*\s*\*\*人设[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*名字[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*专长[^*]*\*\*$/gm,
+            // 只过滤纯人设描述，不包含实际分析内容
+            /^.*\*.*\*\*.*\*\*.*专业的AI算命师.*$/gm,
+            /^.*人设.*专业AI命理师.*$/gm,
+            // 内部标记
+            /^[^*]*（内部，不展示）[^*]*$/gm,
+            /^[^*]*心算或快速查询[^*]*$/gm,
+            /^[^*]*我需要[^*]*$/gm,
+            /^[^*]*快速查询显示[^*]*$/gm,
+            /^[^*]*快速查询[^*]*$/gm,
+            /^[^*]*拆解请求[^*]*$/gm,
+            /^[^*]*分析用户输入[^*]*$/gm,
+            /^[^*]*我是一位[^*]*$/gm
         ];
         for (const pattern of thinkingPatterns) {
             cleanResponse = cleanResponse.replace(pattern, '');
@@ -189,6 +216,15 @@ class RealModelScopeOnlineService {
         };
     }
     async callModelScopeAPI(prompt) {
+        // 等待以避免API频率限制
+        const now = Date.now();
+        const timeSinceLastCall = now - this.lastApiCallTime;
+        if (timeSinceLastCall < this.MIN_API_INTERVAL) {
+            const waitTime = this.MIN_API_INTERVAL - timeSinceLastCall;
+            console.log(`⏳ 等待 ${waitTime}ms 以避免API频率限制`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        this.lastApiCallTime = Date.now();
         const requestPayload = {
             model: this.config.modelId,
             messages: [
@@ -202,14 +238,14 @@ class RealModelScopeOnlineService {
                 }
             ],
             temperature: 0.7,
-            max_tokens: 800
+            max_tokens: 2000 // 增加到2000，避免截断
         };
         const response = await axios_1.default.post(`${this.config.baseUrl}/chat/completions`, requestPayload, {
             headers: {
                 'Authorization': `Bearer ${this.config.apiKey}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 30000
+            timeout: 60000 // 增加到60秒，给AI更多处理时间
         });
         const choice = response.data.choices?.[0]?.message;
         const generatedText = choice?.content || choice?.reasoning_content || response.data.output?.text || '';
@@ -218,31 +254,126 @@ class RealModelScopeOnlineService {
         }
         return generatedText;
     }
-    buildIntelligentPrompt(question, context, customSystemPrompt) {
-        return `你是一位专业的命理师，名字叫"慧心"。请直接给出分析结果，不要显示思考过程。
+    /**
+     * 直接使用原始提示词，不进行任何增强
+     */
+    async enhancePromptWithService(question, context, systemPrompt) {
+        try {
+            console.log('🎯 使用原始提示词，不进行增强');
+            // 直接使用原始提示词，不进行任何增强
+            return this.buildEnhancedPrompt(question, context, systemPrompt);
+        }
+        catch (error) {
+            console.log('❌ 提示词构建失败，使用简单提示词');
+            return `你是一位专业的八字命理师。
 
-用户问题：${question}
+${question}
 
-直接输出最终分析结果，格式如下：
+请为用户进行详细的命理分析。`;
+        }
+    }
+    /**
+     * 构建最原始的提示词，完全模仿原生MCP服务
+     */
+    buildRawPrompt(question, context, systemPrompt) {
+        // 完全模仿原生MCP服务的简单提示词
+        // 原生MCP使用 "You are a helpful assistant"
+        // 我们使用最简单的提示词，让AI自由发挥
+        return `你是一位专业的八字命理师。
 
-👋 您好，朋友！让我来为您详细分析一下...
+用户问：${question}
+请基于八字命理知识直接回答用户的问题，不要泛泛而谈性格分析。`;
+    }
+    /**
+     * 构建最简单的提示词，完全模仿原生MCP服务
+     */
+    buildEnhancedPrompt(question, context, systemPrompt) {
+        // 增强提示词，让AI生成更通俗易懂、排版更好的内容
+        return `你是一位资深的专业八字命理师，拥有20年经验，善于用通俗易懂的语言解释复杂的命理知识。
 
-🌟 性格特点
-您是一个性格温和、富有智慧的人，总是能够以积极的态度面对生活中的各种挑战。
+用户问：${question}
 
-💪 人生优势
-您拥有很强的适应能力和坚韧不拔的意志。
+请基于提供的八字信息，为用户进行详细、专业且易于理解的命理分析。要求：
 
-⚠️ 注意事项
-在重要决策时，建议多思考一下再做决定。
+1. **语言通俗易懂**：用生活化的语言解释专业术语，避免过于学术化的表达
+2. **结构清晰**：使用明确的标题和段落，让用户容易跟随
+3. **重点突出**：对重要的命理特征用简单明了的方式说明
+4. **实用建议**：提供具体、可操作的建议，而不是泛泛而谈
+5. **积极正面**：以积极、建设性的态度分析，避免过于负面的预测
+6. **自然流畅**：保持对话的自然感，像朋友聊天一样亲切
 
-💡 实用建议
-保持积极的心态，多与朋友交流分享您的想法。
-
-🌸 温馨祝福
-愿您的人生路越走越宽，有任何问题随时来找我聊！🌟
-
-记住：绝对不要显示思考过程，直接输出最终结果。`;
+请确保内容完整、专业且易于理解。`;
+    }
+    simplifyResponse(aiResponse) {
+        let cleanResponse = aiResponse.trim().replace(/^["']|["']$/g, '');
+        // 移除技术性思考标记，但保留实际分析内容
+        const technicalPatterns = [
+            // 移除系统提示相关的行
+            /^.*系统提示.*$/gm,
+            /^.*角色设定.*$/gm,
+            /^.*人设.*$/gm,
+            // 移除纯技术性的思考标记
+            /^\s*\*\s*\*\*拆解[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*分析[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*角色[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*输入[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*任务[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*要求[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*人设[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*名字[^*]*\*\*$/gm,
+            /^\s*\*\s*\*\*专长[^*]*\*\*$/gm,
+            // 移除内部标记和心算过程
+            /^[^*]*（内部，不展示）[^*]*$/gm,
+            /^[^*]*心算或快速查询[^*]*$/gm,
+            /^[^*]*快速查询显示[^*]*$/gm,
+            /^[^*]*快速查询[^*]*$/gm,
+            /^[^*]*拆解请求[^*]*$/gm,
+            /^[^*]*分析用户输入[^*]*$/gm,
+            /^[^*]*我需要[^*]*$/gm,
+            /^.*直接开始.*$/gm,
+            /^.*自然.*流畅.*专业.*$/gm,
+            /^.*无列表.*编号.*项目符号.*$/gm,
+            /^.*具体.*实用.*建议.*$/gm,
+            /^.*深入.*详细.*分析.*$/gm,
+            /^.*亲切.*易懂.*语言.*$/gm,
+            /^[^*]*我是一位.*$/gm
+        ];
+        for (const pattern of technicalPatterns) {
+            cleanResponse = cleanResponse.replace(pattern, '');
+        }
+        // 优化排版：移除多余的符号，但保留有意义的格式
+        cleanResponse = cleanResponse.replace(/^#{1,4}\s+/gm, ''); // 移除多余的#号
+        cleanResponse = cleanResponse.replace(/^\s*[-*]\s+/gm, ''); // 移除多余的-和*号
+        cleanResponse = cleanResponse.replace(/^\s*\*\s+/gm, ''); // 移除多余的星号
+        cleanResponse = cleanResponse.replace(/^#{1,4}/gm, ''); // 移除行首的#号
+        // 保留有意义的格式，如：### 标题格式，并转换为更友好的格式
+        cleanResponse = cleanResponse.replace(/^###\s+(.+)$/gm, '\n\n📌 $1\n'); // 保留标题内容，添加emoji
+        cleanResponse = cleanResponse.replace(/^##\s+(.+)$/gm, '\n\n🔍 $1\n'); // 保留标题内容，添加emoji
+        cleanResponse = cleanResponse.replace(/^#\s+(.+)$/gm, '\n\n⭐ $1\n'); // 保留标题内容，添加emoji
+        // 将代码块转换为更易读的格式
+        cleanResponse = cleanResponse.replace(/```/g, '');
+        cleanResponse = cleanResponse.replace(/^年柱：(.+)$/gm, '📅 年柱：$1');
+        cleanResponse = cleanResponse.replace(/^月柱：(.+)$/gm, '📅 月柱：$1');
+        cleanResponse = cleanResponse.replace(/^日柱：(.+)$/gm, '📅 日柱：$1');
+        cleanResponse = cleanResponse.replace(/^时柱：(.+)$/gm, '📅 时柱：$1');
+        // 将重点内容转换为更易读的格式
+        cleanResponse = cleanResponse.replace(/\*\*(.+?)\*\*/g, '🌟 $1 🌟'); // 将加粗内容用emoji包围
+        cleanResponse = cleanResponse.replace(/>([^<]*)/gm, '💡 $1'); // 将引用内容用emoji包围
+        // 清理多余的空行，但保留段落结构
+        cleanResponse = cleanResponse.replace(/\n{3,}/g, '\n\n').trim();
+        // 添加友好的开头和结尾
+        if (!cleanResponse.startsWith('👋')) {
+            cleanResponse = '👋 您好！我是您的专业八字命理师，很高兴为您分析。\n\n' + cleanResponse;
+        }
+        // 添加友好的结尾
+        if (!cleanResponse.includes('祝您')) {
+            cleanResponse += '\n\n\n🙏 感谢您的信任！希望这次分析能为您的生活和未来提供一些有价值的参考。祝您身体健康，万事如意！';
+        }
+        // 如果清理后为空或内容太少，返回更详细的默认响应
+        if (!cleanResponse || cleanResponse.length < 30) {
+            return '👋 您好！我是您的专业八字命理师。根据您提供的出生信息，我会为您进行详细的命理分析，包括性格特征、事业运势、感情婚姻和健康建议。';
+        }
+        return cleanResponse;
     }
     async healthCheck() {
         try {
@@ -273,3 +404,4 @@ class RealModelScopeOnlineService {
 }
 exports.RealModelScopeOnlineService = RealModelScopeOnlineService;
 exports.default = RealModelScopeOnlineService;
+//# sourceMappingURL=realModelScopeOnlineService.js.map
