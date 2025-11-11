@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "build": "echo 'Skipping frontend build for NIXPACKS - using pre-built dist'",
-  "start": "node start-railway-js-only.js",
-  "dev": "node start-railway-js-only.js",
-    "postinstall": "cd backend && npm ci --production || true",
+    "start": "node start-railway-js-only.js",
+    "dev": "node start-railway-js-only.js",
+    "postinstall": "cd backend && npm ci --production",
     "docker-build": "docker build -t ai-fortune-website .",
     "vercel-build": "cd frontend && npm install && npm run build"
   },
