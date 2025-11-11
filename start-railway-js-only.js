@@ -27,6 +27,29 @@ app.use((req, res, next) => {
 // 静态前端文件服务
 app.use(express.static(path.join(__dirname, 'dist')));
 
+// 如果仓库中存在完整后端的编译输出（backend/dist），优先挂载原始后端路由
+let SKIP_LOCAL_ROUTES = false;
+try {
+  const useCompleteBackend = process.env.USE_REAL_BACKEND === 'true' || process.env.USE_COMPLETE_BACKEND === 'true' || process.env.USE_BACKEND === 'true';
+  if (useCompleteBackend) {
+    try {
+      // 尝试加载已编译的后端路由（JS）并挂载到当前 express 实例上
+      const fortuneRouterModule = require('./backend/dist/routes/fortune');
+      const fortuneRouter = fortuneRouterModule && (fortuneRouterModule.default || fortuneRouterModule);
+      if (fortuneRouter) {
+        app.use('/api/fortune', fortuneRouter);
+        SKIP_LOCAL_ROUTES = true;
+        console.log('✅ 已挂载完整后端路由: ./backend/dist/routes/fortune (/api/fortune)');
+      }
+    }
+    catch (err) {
+      console.error('⚠️ 尝试挂载完整后端路由失败，回退到本地 JS-only 实现:', err && err.message);
+    }
+  }
+} catch (err) {
+  console.warn('⚠️ 检查是否使用完整后端时发生错误:', err && err.message);
+}
+
 // 全局出生日期缓存，用于跨请求保存出生信息
 const birthDataCache = new Map();
 
@@ -326,8 +349,9 @@ app.get('/api/env', (req, res) => {
   });
 });
 
-// AI 占卜聊天接口 - 使用纯JavaScript智能分析
-app.post('/api/fortune/chat', async (req, res) => {
+if (!SKIP_LOCAL_ROUTES) {
+  // AI 占卜聊天接口 - 使用纯JavaScript智能分析
+  app.post('/api/fortune/chat', async (req, res) => {
   try {
     const { type, question, context, sessionId } = req.body;
     
@@ -397,10 +421,10 @@ app.post('/api/fortune/chat', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   }
-});
+  });
 
-// 获取运势类型
-app.get('/api/fortune/types', (req, res) => {
+  // 获取运势类型
+  app.get('/api/fortune/types', (req, res) => {
   res.json({
     success: true,
     data: [
@@ -426,4 +450,6 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🔧 Environment Check: ${baseUrl}/api/env`);
   console.log(`🤖 Using ModelScope: ${process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507'}`);
   console.log(`📝 纯JavaScript版本，智能本地分析`);
-});
+  });
+
+} // end if (!SKIP_LOCAL_ROUTES)
