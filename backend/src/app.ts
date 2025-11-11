@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
 import fortuneRoutes from './routes/fortune';
 
 // 确保在导入其他模块之前加载环境变量
@@ -20,6 +21,17 @@ app.use(cors({
 app.use(morgan('combined')); // 请求日志
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// 静态文件服务 - 提供前端页面
+app.use(express.static(path.join(__dirname, '../dist')));
+
+// SPA路由支持 - 所有非API路由返回index.html
+app.get('*', (req, res, next) => {
+  if (req.url.startsWith('/api/')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, '../dist/index.html'));
+});
 
 // 路由配置
 app.use('/api/fortune', fortuneRoutes);

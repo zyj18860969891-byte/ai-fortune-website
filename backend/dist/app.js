@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const dotenv_1 = __importDefault(require("dotenv"));
+const path_1 = __importDefault(require("path"));
 const fortune_1 = __importDefault(require("./routes/fortune"));
 // 确保在导入其他模块之前加载环境变量
 dotenv_1.default.config();
@@ -22,6 +23,15 @@ app.use((0, cors_1.default)({
 app.use((0, morgan_1.default)('combined')); // 请求日志
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
+// 静态文件服务 - 提供前端页面
+app.use(express_1.default.static(path_1.default.join(__dirname, '../dist')));
+// SPA路由支持 - 所有非API路由返回index.html
+app.get('*', (req, res, next) => {
+    if (req.url.startsWith('/api/')) {
+        return next();
+    }
+    res.sendFile(path_1.default.join(__dirname, '../dist/index.html'));
+});
 // 路由配置
 app.use('/api/fortune', fortune_1.default);
 // 健康检查接口
