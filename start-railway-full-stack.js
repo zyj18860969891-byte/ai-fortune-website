@@ -89,7 +89,7 @@ function startBackendService() {
   
   // 先构建后端 TypeScript
   console.log('🔨 构建后端服务...');
-  const buildProcess = spawn('cd', ['backend', '&&', 'npm', 'run', 'build'], {
+  const buildProcess = spawn('cd', ['backend', '&&', 'npx', 'tsc'], {
     stdio: 'pipe',
     shell: true,
     env: backendEnv
@@ -107,7 +107,7 @@ function startBackendService() {
     if (buildCode === 0) {
       console.log('✅ 后端构建成功，启动服务器...');
       
-      const backendProcess = spawn('npm', ['start'], {
+      const backendProcess = spawn('npx', ['node', 'dist/server.js'], {
         cwd: path.join(__dirname, 'backend'),
         stdio: 'pipe',
         shell: true,
