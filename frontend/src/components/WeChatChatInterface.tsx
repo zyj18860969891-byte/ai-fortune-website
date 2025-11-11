@@ -66,18 +66,28 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
     setIsLoading(true);
 
     try {
+      // 提取出生信息（如果用户输入了日期）
+      const birthInfo = extractBirthInfo(inputText.trim());
+      
       // 调用AI占卜API - 使用相对路径触发Vercel重写规则
+      const requestBody: any = {
+        question: inputText.trim(),
+        type: fortuneType,
+        context: messages.slice(-6).map(m => `${m.type === 'user' ? '用户' : '占卜师'}: ${m.content}`).join('\n'),
+        sessionId: `session-${Date.now()}`
+      };
+      
+      // 如果提取到出生信息，添加到请求中
+      if (birthInfo) {
+        requestBody.birthInfo = birthInfo;
+      }
+      
       const response = await fetch(`/api/fortune/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          question: inputText.trim(),
-          type: fortuneType,
-          context: messages.slice(-6).map(m => `${m.type === 'user' ? '用户' : '占卜师'}: ${m.content}`).join('\n'),
-          sessionId: `session-${Date.now()}`
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       const data = await response.json();
@@ -109,6 +119,30 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // 提取出生信息的函数
+  const extractBirthInfo = (text: string) => {
+    // 匹配日期格式：1990.05.15 或 1990年5月15日 或 1990/5/15
+    const datePatterns = [
+      /(\d{4})[年./](\d{1,2})[月./](\d{1,2})/g,
+      /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})/g
+    ];
+    
+    for (const pattern of datePatterns) {
+      const match = text.match(pattern);
+      if (match) {
+        return {
+          year: parseInt(match[1]),
+          month: parseInt(match[2]),
+          day: parseInt(match[3]),
+          hour: 0, // 默认子时
+          minute: 0
+        };
+      }
+    }
+    
+    return null;
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {

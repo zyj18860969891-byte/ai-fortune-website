@@ -213,12 +213,10 @@ router.post('/chat', async (req: Request, res: Response) => {
                   
                   // 检查是否有八字相关数据（支持多种格式）- 修复检查逻辑
                   const hasBaziData = (
-                    baziResult.data && '八字' in baziResult.data ||
-                    baziResult.data && '八字' in (baziResult.data.八字 || {}) ||
-                    baziResult.data && baziResult.data.八字 ||
-                    baziResult.data && baziResult.data['八字'] ||
-                    (baziResult.data && baziResult.data.data && '八字' in baziResult.data.data) ||
-                    (baziResult.data && baziResult.data.content && typeof baziResult.data.content === 'string' && baziResult.data.content.includes('八字'))
+                    baziResult.data && ('八字' in baziResult.data || baziResult.data.八字 || baziResult.data['八字']) ||
+                    (baziResult.data && baziResult.data.八字) ||
+                    (baziResult.data && baziResult.data.data && ('八字' in baziResult.data.data || baziResult.data.data.八字)) ||
+                    (baziResult.data && baziResult.data.content && typeof baziResult.data.content === 'string' && (baziResult.data.content.includes('八字') || baziResult.data.content.includes('生肖') || baziResult.data.content.includes('日主')))
                   );
                   
                   if (hasBaziData) {
@@ -422,9 +420,8 @@ ${Object.entries(baziData.神煞 || {}).map(([key, value]: [string, any]) =>
         baziData.日主 ||
         baziData.阳历 ||
         baziData.农历 ||
-        (baziData.data && baziData.data.八字) ||
-        (baziData.data && baziData.data.生肖) ||
-        (baziData.data && baziData.data.日主)
+        (baziData.data && (baziData.data.八字 || baziData.data.生肖 || baziData.data.日主)) ||
+        (typeof baziData === 'object' && Object.keys(baziData).length > 0) // 只要baziData是包含内容的对象就为true
       )), // 只要包含八字相关信息就为true
       timestamp: new Date().toISOString()
     };
