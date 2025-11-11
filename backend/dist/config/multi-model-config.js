@@ -30,7 +30,7 @@ class MultiModelConfig {
         // ModelScope配置 - Qwen-7B-Chat
         const modelScopeConfig = {
             apiKey: process.env.MODELSCOPE_TOKEN || '',
-            modelId: process.env.MODELSCOPE_MODEL_ID || 'ZhipuAI/GLM-4.6',
+            modelId: process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507',
             baseUrl: process.env.MODELSCOPE_BASE_URL || 'https://api-inference.modelscope.cn/v1',
             serviceType: 'modelscope'
         };

@@ -21,8 +21,21 @@ app.use((0, cors_1.default)({
     credentials: true
 }));
 app.use((0, morgan_1.default)('combined')); // 请求日志
-app.use(express_1.default.json({ limit: '10mb' }));
-app.use(express_1.default.urlencoded({ extended: true }));
+// 修复中文字符编码问题
+app.use(express_1.default.json({
+    limit: '10mb',
+    verify: (req, res, buf) => {
+        // 确保中文字符正确解析
+        req.rawBody = buf;
+    }
+}));
+app.use(express_1.default.urlencoded({
+    extended: true,
+    verify: (req, res, buf) => {
+        // 确保中文字符正确解析
+        req.rawBody = buf;
+    }
+}));
 // 静态文件服务 - 提供前端页面
 // 从 backend/dist 指向根目录的 dist
 const frontendDistPath = path_1.default.join(__dirname, '../../dist');

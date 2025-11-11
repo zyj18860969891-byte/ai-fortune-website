@@ -319,12 +319,21 @@ class MsAgentStyleMcpService {
      */
     async calculateBazi(birthData) {
         try {
-            console.log('🔮 使用Bazi MCP工具计算八字:', birthData);
+            console.log('🔮 使用Bazi MCP工具计算八字');
+            console.log('📊 原始birthData:', JSON.stringify(birthData, null, 2));
             // 根据八字MCP文档准备参数
             const baziArgs = this.prepareBaziArgs(birthData);
-            console.log('📋 准备Bazi MCP参数:', baziArgs);
+            console.log('📋 准备Bazi MCP参数:', JSON.stringify(baziArgs, null, 2));
+            console.log('🔧 参数类型检查:', {
+                hasSolarDatetime: !!baziArgs.solarDatetime,
+                hasLunarDatetime: !!baziArgs.lunarDatetime,
+                gender: baziArgs.gender,
+                eightCharProviderSect: baziArgs.eightCharProviderSect
+            });
             // 使用正确的工具名称getBaziDetail
+            console.log('🚀 开始调用MCP工具...');
             const result = await this.callTool('Bazi-MCP', 'getBaziDetail', baziArgs);
+            console.log('📡 MCP工具调用完成，返回结果:', result);
             if (result.success) {
                 console.log('✅ Bazi MCP计算成功');
                 console.log('📄 原始响应内容:', result.content);
