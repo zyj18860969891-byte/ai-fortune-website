@@ -29,6 +29,7 @@ app.use(express.static(path.join(__dirname, 'dist')));
 
 // 如果仓库中存在完整后端的编译输出（backend/dist），优先挂载原始后端路由
 let SKIP_LOCAL_ROUTES = false;
+let SKIP_LOCAL_SERVER = false;
 try {
   const useCompleteBackend = process.env.USE_REAL_BACKEND === 'true' || process.env.USE_COMPLETE_BACKEND === 'true' || process.env.USE_BACKEND === 'true';
   if (useCompleteBackend) {
@@ -48,6 +49,30 @@ try {
   }
 } catch (err) {
   console.warn('⚠️ 检查是否使用完整后端时发生错误:', err && err.message);
+}
+
+// 如果明确要求使用完整后端应用（backend/dist/app.js），尝试直接启动它并退出当前轻量服务
+try {
+  const useCompleteBackend = process.env.USE_REAL_BACKEND === 'true' || process.env.USE_COMPLETE_BACKEND === 'true' || process.env.USE_BACKEND === 'true';
+  if (useCompleteBackend) {
+    try {
+      const backendAppModule = require('./backend/dist/app');
+      const backendApp = backendAppModule && (backendAppModule.default || backendAppModule);
+      if (backendApp && typeof backendApp.listen === 'function') {
+        const backendPort = process.env.PORT || PORT;
+        backendApp.listen(backendPort, '0.0.0.0', () => {
+          console.log(`✅ 已启动完整后端应用 (backend/dist/app)，监听端口 ${backendPort}`);
+        });
+        SKIP_LOCAL_SERVER = true;
+        console.log('ℹ️ 当前进程已切换到完整后端应用，跳过本地 JS-only 路由与监听');
+      }
+    }
+    catch (err) {
+      console.error('⚠️ 启动完整后端应用失败，继续使用本地 JS-only 实现:', err && err.message);
+    }
+  }
+} catch (err) {
+  console.warn('⚠️ 检查启动完整后端时发生错误:', err && err.message);
 }
 
 // 全局出生日期缓存，用于跨请求保存出生信息
@@ -440,16 +465,18 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  const hostname = process.env.RAILWAY_DEPLOYMENT_ID || 'your-app.railway.app';
-  const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN || `https://${hostname}.railway.app`;
-  
-  console.log(`🎉 AI Fortune Website running on port ${PORT}`);
-  console.log(`🌐 Frontend: ${baseUrl}`);
-  console.log(`🔍 Health Check: ${baseUrl}/health`);
-  console.log(`🔧 Environment Check: ${baseUrl}/api/env`);
-  console.log(`🤖 Using ModelScope: ${process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507'}`);
-  console.log(`📝 纯JavaScript版本，智能本地分析`);
+if (!SKIP_LOCAL_SERVER) {
+  app.listen(PORT, '0.0.0.0', () => {
+    const hostname = process.env.RAILWAY_DEPLOYMENT_ID || 'your-app.railway.app';
+    const baseUrl = process.env.RAILWAY_PUBLIC_DOMAIN || `https://${hostname}.railway.app`;
+    
+    console.log(`🎉 AI Fortune Website running on port ${PORT}`);
+    console.log(`🌐 Frontend: ${baseUrl}`);
+    console.log(`🔍 Health Check: ${baseUrl}/health`);
+    console.log(`🔧 Environment Check: ${baseUrl}/api/env`);
+    console.log(`🤖 Using ModelScope: ${process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507'}`);
+    console.log(`📝 纯JavaScript版本，智能本地分析`);
   });
+}
 
 } // end if (!SKIP_LOCAL_ROUTES)
