@@ -128,8 +128,12 @@ router.post('/chat', async (req: Request, res: Response) => {
       }
     }
     
-    // 如果当前请求没有出生数据，尝试从缓存获取
-    if (!birthData && requestData.sessionId) {
+    // 优先使用当前请求的birthInfo，仅在缺少时尝试从缓存获取
+    if (!birthData && requestData.birthInfo) {
+      birthData = requestData.birthInfo;
+      console.log('✅ 使用当前请求的birthInfo:', birthData);
+    } else if (!birthData && requestData.sessionId) {
+      // 仅在没有birthInfo时，才从缓存获取
       const cachedBirthData = birthDataCache.get(requestData.sessionId);
       if (cachedBirthData) {
         birthData = cachedBirthData;
