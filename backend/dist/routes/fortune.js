@@ -7,58 +7,6 @@ const router = (0, express_1.Router)();
 const mcpService = msAgentStyleMcpService_1.MsAgentStyleMcpService.getInstance();
 // 全局出生日期缓存，用于跨请求保存出生信息
 const birthDataCache = new Map();
-// 从上下文提取并缓存出生日期的函数
-function extractAndCacheBirthData(context, sessionId) {
-    if (!context)
-        return null;
-    console.log('🔍 开始从上下文提取出生数据，context长度:', context.length);
-    let birthData = null;
-    // 方法1：从上下文中提取用户提供的出生日期
-    const userMessages = context.split('\n').filter(line => line.startsWith('用户:') && !line.includes('占卜师:'));
-    console.log('🔍 提取到的用户消息:', userMessages);
-    // 首先尝试从用户消息中提取
-    for (const message of userMessages) {
-        const match = message.match(/用户:\s*(.+)/);
-        if (match) {
-            const question = match[1];
-            console.log('🔍 尝试从消息提取出生日期:', question);
-            const extractedData = extractBirthDataFromQuestion(question);
-            if (extractedData) {
-                birthData = extractedData;
-                console.log('✅ 从用户消息成功提取出生数据:', birthData);
-                break;
-            }
-        }
-    }
-    // 方法2：如果从用户消息中没有找到，尝试从整个context中搜索
-    if (!birthData) {
-        console.log('🔍 从用户消息中未找到出生数据，尝试从整个context搜索');
-        const extractedData = extractBirthDataFromQuestion(context);
-        if (extractedData) {
-            birthData = extractedData;
-            console.log('✅ 从整个context成功提取出生数据:', birthData);
-        }
-    }
-    // 方法3：尝试从占卜师的回复中提取（如果用户在回复中提到了出生日期）
-    if (!birthData) {
-        console.log('🔍 从context和用户消息中未找到出生数据，尝试从占卜师回复中提取');
-        const fortuneMessages = context.split('\n').filter(line => line.includes('八字') || line.includes('阳历') || line.includes('农历'));
-        for (const message of fortuneMessages) {
-            const extractedData = extractBirthDataFromQuestion(message);
-            if (extractedData) {
-                birthData = extractedData;
-                console.log('✅ 从占卜师回复成功提取出生数据:', birthData);
-                break;
-            }
-        }
-    }
-    // 如果找到出生数据，缓存它
-    if (birthData && sessionId) {
-        birthDataCache.set(sessionId, birthData);
-        console.log('🔧 缓存出生数据:', { sessionId, birthData });
-    }
-    return birthData;
-}
 // 聊天接口
 router.post('/chat', async (req, res) => {
     const startTime = Date.now();
