@@ -19,8 +19,23 @@ app.use(cors({
   credentials: true
 }));
 app.use(morgan('combined')); // 请求日志
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+
+// 修复中文字符编码问题
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req: any, res, buf) => {
+    // 确保中文字符正确解析
+    req.rawBody = buf;
+  }
+}));
+
+app.use(express.urlencoded({ 
+  extended: true,
+  verify: (req: any, res, buf) => {
+    // 确保中文字符正确解析
+    req.rawBody = buf;
+  }
+}));
 
 // 静态文件服务 - 提供前端页面
 // 从 backend/dist 指向根目录的 dist

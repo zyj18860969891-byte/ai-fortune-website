@@ -103,6 +103,22 @@ router.post('/chat', async (req: Request, res: Response) => {
     let birthData = requestData.birthInfo || extractBirthDataFromQuestion(requestData.question || '');
     let analysisType = 'general';
     
+    console.log('🔍 初始birthData提取结果:', birthData);
+    console.log('🔧 birthData类型检查:', {
+      hasBirthData: !!birthData,
+      birthDataKeys: birthData ? Object.keys(birthData) : null,
+      hasYear: !!birthData?.year,
+      hasMonth: !!birthData?.month,
+      hasDay: !!birthData?.day
+    });
+    console.log('🔧 birthData类型检查:', {
+      hasBirthData: !!birthData,
+      birthDataKeys: birthData ? Object.keys(birthData) : null,
+      hasYear: !!birthData?.year,
+      hasMonth: !!birthData?.month,
+      hasDay: !!birthData?.day
+    });
+    
     // 尝试从上下文提取出生日期并缓存
     if (requestData.context) {
       const contextBirthData = extractAndCacheBirthData(requestData.context, requestData.sessionId);
@@ -125,12 +141,15 @@ router.post('/chat', async (req: Request, res: Response) => {
     if (requestData.type === 'bazi') {
       try {
         console.log('🔮 调用@cantian-ai/Bazi-MCP服务（聊天模式）...');
+        console.log('🔍 当前birthData:', birthData);
         
-        // 如果用户提供了出生信息，使用用户的出生信息
-        // 否则，检查用户问题中是否包含出生日期
-        birthData = requestData.birthInfo || extractBirthDataFromQuestion(requestData.question || '');
+        // birthData已经通过上面的逻辑提取过了，不需要重复提取
+        if (!birthData) {
+          console.log('⚠️ 再次尝试提取出生数据');
+          birthData = requestData.birthInfo || extractBirthDataFromQuestion(requestData.question || '');
+        }
         
-        console.log('🔍 提取的出生数据:', birthData);
+        console.log('🔍 最终birthData:', birthData);
         
         // 如果没有找到出生信息，尝试从上下文和缓存中获取
         if (!birthData) {
@@ -162,31 +181,49 @@ router.post('/chat', async (req: Request, res: Response) => {
         }
         
         if (birthData) {
-          const baziResult = await mcpService.calculateBazi(birthData);
-          
-          if (baziResult.success) {
-            // 解析MCP返回的八字数据
-            try {
-              const mcpContent = baziResult.data?.content?.[0]?.text;
-              if (mcpContent) {
-                baziData = JSON.parse(mcpContent);
-                analysisType = 'bazi-enhanced';
-                console.log('✅ 聊天模式八字MCP计算成功');
-                console.log('📊 八字数据:', {
-                  '八字': baziData.八字,
-                  '生肖': baziData.生肖,
-                  '日主': baziData.日主,
-                  '阳历': baziData.阳历
-                });
-              } else {
-                console.log('⚠️ MCP返回数据格式异常:', baziResult.data);
+          console.log('🔮 准备调用MCP服务，出生数据:', birthData);
+          try {
+            const baziResult = await mcpService.calculateBazi(birthData);
+            console.log('📊 MCP服务调用结果:', baziResult);
+            
+            if (baziResult.success) {
+              // 解析MCP返回的八字数据 - 修复解析路径
+              try {
+                console.log('📄 MCP原始响应:', baziResult);
+                
+                // MCP服务返回的数据结构：{ success: true, data: { 八字, 生肖, 日主, ... } }
+                if (baziResult.data && typeof baziResult.data === 'object') {
+                  baziData = baziResult.data;
+                  analysisType = 'bazi-enhanced';
+                  console.log('✅ 聊天模式八字MCP计算成功');
+                  console.log('📊 八字数据:', {
+                    '八字': baziData.八字,
+                    '生肖': baziData.生肖,
+                    '日主': baziData.日主,
+                    '阳历': baziData.阳历
+                  });
+                } else if (baziResult.content) {
+                  // 如果content字段存在，尝试解析为JSON
+                  try {
+                    baziData = JSON.parse(baziResult.content);
+                    console.log('✅ 从content字段解析成功');
+                  } catch (contentError) {
+                    console.log('⚠️ content字段JSON解析失败:', contentError);
+                    baziData = null;
+                  }
+                } else {
+                  console.log('⚠️ MCP返回数据格式异常:', baziResult);
+                  baziData = null;
+                }
+              } catch (parseError) {
+                console.log('⚠️ 八字数据解析失败:', parseError);
+                baziData = null;
               }
-            } catch (parseError) {
-              console.log('⚠️ 八字数据JSON解析失败:', parseError);
-              baziData = baziResult.data;
+            } else {
+              console.log('⚠️ 八字MCP计算失败:', baziResult.message);
             }
-          } else {
-            console.log('⚠️ 八字MCP计算失败:', baziResult.message);
+          } catch (serviceError) {
+            console.log('❌ MCP服务调用异常:', serviceError);
           }
         } else {
           console.log('⚠️ 未找到有效的生辰数据');
@@ -201,7 +238,7 @@ router.post('/chat', async (req: Request, res: Response) => {
     
     const modelConfig = {
       apiKey: process.env.MODELSCOPE_API_KEY || 'ms-bf1291c1-c1ed-464c-b8d8-162fdee96180',
-      modelId: process.env.MODELSCOPE_MODEL || 'ZhipuAI/GLM-4.6',
+      modelId: process.env.MODELSCOPE_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507',
       baseUrl: process.env.MODELSCOPE_BASE_URL || 'https://api-inference.modelscope.cn/v1'
     };
     
@@ -312,7 +349,7 @@ ${Object.entries(baziData.神煞 || {}).map(([key, value]: [string, any]) =>
       success: true,
       response: result.prediction,
       source: result.source,
-      hasBaziData: !!baziData,
+      hasBaziData: !!(baziData && baziData.八字 && baziData.日主), // 只有当有完整的八字数据时才为true
       timestamp: new Date().toISOString()
     };
     
@@ -438,6 +475,14 @@ function extractBirthDataFromQuestion(question: string): any {
   if (!question) return null;
   
   console.log('🔍 开始从问题中提取出生日期:', question);
+  
+  // 过滤掉明显不是出生信息的输入
+  const invalidInputs = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const trimmedQuestion = question.trim();
+  if (invalidInputs.includes(trimmedQuestion)) {
+    console.log('⚠️ 输入内容不是有效的出生信息:', trimmedQuestion);
+    return null;
+  }
   
   const patterns = [
     // 标准格式：1996.02.10 或 1996-02-10 或 1996/02/10
