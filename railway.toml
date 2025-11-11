@@ -2,14 +2,14 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "node start-railway-native.js"
+startCommand = "node start-railway-full-stack.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5
 
 [build.nixpacks]
-buildCommand = "npm install"
-installCommand = "npm install"
-startCommand = "node start-railway-native.js"
+buildCommand = "npm install && cd backend && npm install && npm run build"
+installCommand = "npm install && cd backend && npm install"
+startCommand = "node start-railway-full-stack.js"
 
 [environments.production]
 NODE_ENV = "production"

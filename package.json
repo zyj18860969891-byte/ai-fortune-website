@@ -5,14 +5,15 @@
   "main": "index.js",
   "scripts": {
     "build": "echo 'Skipping frontend build for NIXPACKS - using pre-built dist'",
-    "start": "node start-railway-simple.js",
-    "dev": "node start-railway-simple.js",
+    "start": "node start-railway-full-stack.js",
+    "dev": "node start-railway-full-stack.js",
     "docker-build": "docker build -t ai-fortune-website .",
     "vercel-build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "node-fetch": "^3.3.2"
   },
   "keywords": ["ai", "fortune", "modelscope", "inference"],
   "author": "AI Assistant",
