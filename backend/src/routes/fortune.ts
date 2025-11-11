@@ -190,6 +190,8 @@ router.post('/chat', async (req: Request, res: Response) => {
               // 解析MCP返回的八字数据 - 修复解析路径
               try {
                 console.log('📄 MCP原始响应:', baziResult);
+                console.log('🔍 检查baziResult.data:', baziResult.data);
+                console.log('🔍 检查baziResult.content:', baziResult.content);
                 
                 // MCP服务返回的数据结构：{ success: true, data: { 八字, 生肖, 日主, ... } }
                 if (baziResult.data && typeof baziResult.data === 'object') {
@@ -207,6 +209,7 @@ router.post('/chat', async (req: Request, res: Response) => {
                   try {
                     baziData = JSON.parse(baziResult.content);
                     console.log('✅ 从content字段解析成功');
+                    console.log('🔍 解析后的baziData:', baziData);
                   } catch (contentError) {
                     console.log('⚠️ content字段JSON解析失败:', contentError);
                     baziData = null;
@@ -215,6 +218,10 @@ router.post('/chat', async (req: Request, res: Response) => {
                   console.log('⚠️ MCP返回数据格式异常:', baziResult);
                   baziData = null;
                 }
+                
+                console.log('🔍 最终baziData值:', baziData);
+                console.log('🔍 baziData类型:', typeof baziData);
+                console.log('🔍 baziData是否为null:', baziData === null);
               } catch (parseError) {
                 console.log('⚠️ 八字数据解析失败:', parseError);
                 baziData = null;
