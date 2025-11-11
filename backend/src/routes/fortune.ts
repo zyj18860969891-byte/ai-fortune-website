@@ -155,25 +155,18 @@ router.post('/chat', async (req: Request, res: Response) => {
         
         console.log('🔍 最终birthData:', birthData);
         
-        // 如果没有找到出生信息，尝试从上下文和缓存中获取
+        // 如果没有找到出生信息，仅尝试从缓存获取（禁用context提取）
         if (!birthData) {
-          // 尝试从上下文提取
-          if (requestData.context) {
-            const contextBirthData = extractAndCacheBirthData(requestData.context, requestData.sessionId);
-            if (contextBirthData) {
-              birthData = contextBirthData;
-              console.log('🔍 从上下文提取到出生数据:', birthData);
-            }
-          }
-          
-          // 尝试从缓存获取
-          if (!birthData && requestData.sessionId) {
+          // 尝试从缓存获取（但仅在没有当前birthInfo的情况下）
+          if (requestData.sessionId) {
             const cachedBirthData = birthDataCache.get(requestData.sessionId);
             if (cachedBirthData) {
               birthData = cachedBirthData;
               console.log('🔧 从缓存获取出生数据:', { sessionId: requestData.sessionId, birthData });
             }
           }
+          
+          // 注意：不再从context中提取数据，避免污染
         }
         
         console.log('🔍 最终出生数据:', birthData);
@@ -372,8 +365,17 @@ ${Object.entries(baziData.神煞 || {}).map(([key, value]: [string, any]) =>
       enhancedQuestion = `${requestData.question}\n\n八字：${baziData.八字 || '未知'}\n日主：${baziData.日主 || '未知'}\n生肖：${baziData.生肖 || '未知'}\n农历：${baziData.农历 || '未知'}\n阳历：${baziData.阳历 || '未知'}\n\n请基于以上八字信息，给出自然流畅的命理分析。`;
       systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。请基于八字数据给出自然流畅的命理分析。';
     } else if (requestData.type === 'bazi') {
-      enhancedQuestion = `${requestData.question}\n\n注意：您请求的是八字分析，但未提供出生信息。我将为您提供一般性的占卜分析，建议您提供出生信息以获得更精准的八字分析。`;
-      systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。您请求的是八字分析，但未提供出生信息。我将为您提供一般性的占卜分析，建议您提供出生信息以获得更精准的八字分析。';
+      // 智能判断：确实没有出生信息时的处理
+      const hasAnyBirthInfo = extractBirthDataFromQuestion(requestData.question);
+      if (!hasAnyBirthInfo && !birthData) {
+        // 明确没有出生信息时，要求用户提供
+        enhancedQuestion = requestData.question;
+        systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。\n\n要进行准确的八字分析，需要您的出生信息。请提供：\n1. 出生日期（如：1996年2月10日 或 1996.02.10）\n2. 出生时间（如：上午10点 或 下午2点，如不知道可默认子时）\n3. 性别（男/女）\n\n提供这些信息后，我会为您进行专业的命理分析。';
+      } else {
+        // 有部分信息或不确定时，提供通用建议
+        enhancedQuestion = `${requestData.question}\n\n注意：您请求的是八字分析，但可能未提供完整的出生信息。我将为您提供一般性的占卜分析，建议您提供完整的出生日期、时间以获得更精准的八字分析。`;
+        systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。您请求的是八字分析，但可能未提供完整出生信息。我将为您提供一般性的占卜分析，建议您提供完整出生信息以获得更精准的八字分析。';
+      }
     }
     
     console.log('🔍 调试信息:', {
@@ -529,22 +531,67 @@ router.get('/health', (req: Request, res: Response) => {
 function extractBirthDataFromContext(context: string): any {
   if (!context) return null;
   
-  // 从上下文中提取用户消息中的出生日期
-  const userMessages = context.split('\n').filter(line => 
-    line.startsWith('用户:') && !line.includes('占卜师:')
-  );
+  console.log('🔍 智能解析上下文，查找真实用户出生数据...');
   
-  for (const message of userMessages) {
-    const match = message.match(/用户:\s*(.+)/);
-    if (match) {
-      const question = match[1];
-      const birthData = extractBirthDataFromQuestion(question);
-      if (birthData) {
-        return birthData;
+  // 智能策略：优先从最新的用户消息中提取，排除AI格式说明中的示例
+  const lines = context.split('\n');
+  
+  // 方法1：从明确标记的"用户:"消息中提取
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    
+    // 只处理明确标记的用户消息行
+    if (line.startsWith('用户:') && !line.includes('占卜师:')) {
+      const match = line.match(/用户:\s*(.+)/);
+      if (match) {
+        const question = match[1].trim();
+        
+        // 排除明显的非真实出生信息
+        const excludePatterns = [
+          '出生日期（格式', '格式：', '格式:', '示例', '例子',
+          '1990.05.15', '1990年5月15日', '提供您的', '先提供'
+        ];
+        
+        const isExcluded = excludePatterns.some(pattern => 
+          line.includes(pattern) || question.includes(pattern)
+        );
+        
+        if (!isExcluded && question.length < 50) { // 真实生辰信息通常较短
+          const birthData = extractBirthDataFromQuestion(question);
+          if (birthData) {
+            console.log('✅ 从用户消息智能提取出生数据:', birthData);
+            return birthData;
+          }
+        }
       }
     }
   }
   
+  // 方法2：从AI回复中提取（当用户明确回复了出生信息时）
+  const aiMessages = context.split('\n').filter(line => 
+    line.startsWith('占卜师:') && (
+      line.includes('确认出生日期') || 
+      line.includes('已确认') || 
+      line.includes('好的，') ||
+      line.includes('明白了，')
+    )
+  );
+  
+  for (const message of aiMessages) {
+    // 尝试从AI确认消息中提取后续的真实出生数据
+    const nextLines = lines.slice(lines.indexOf(message) + 1);
+    for (const nextLine of nextLines) {
+      if (nextLine.trim().startsWith('用户:')) {
+        const birthData = extractBirthDataFromQuestion(nextLine.replace(/^用户:\s*/, ''));
+        if (birthData) {
+          console.log('✅ 从AI确认对话中智能提取出生数据:', birthData);
+          return birthData;
+        }
+      }
+    }
+  }
+  
+  console.log('⚠️ 上下文智能解析未找到有效用户出生数据');
   return null;
 }
 
