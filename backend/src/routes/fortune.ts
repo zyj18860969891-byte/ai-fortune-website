@@ -119,19 +119,20 @@ router.post('/chat', async (req: Request, res: Response) => {
       hasDay: !!birthData?.day
     });
     
-    // 尝试从上下文提取出生日期并缓存
-    if (requestData.context) {
-      const contextBirthData = extractAndCacheBirthData(requestData.context, requestData.sessionId);
-      if (contextBirthData) {
-        birthData = contextBirthData;
-        console.log('🔍 从上下文提取到出生数据:', birthData);
-      }
-    }
+    // 注意：完全禁用从上下文提取出生数据，避免AI格式示例污染
+    // 仅使用当前请求的birthInfo或从问题中提取
+    console.log('⚠️ 已禁用上下文出生数据提取，避免AI格式示例污染');
     
-    // 优先使用当前请求的birthInfo，仅在缺少时尝试从缓存获取
-    if (!birthData && requestData.birthInfo) {
+    // 优先级：当前请求birthInfo > 从问题中提取 > 缓存数据
+    // 绝对优先使用当前请求的birthInfo
+    if (requestData.birthInfo) {
       birthData = requestData.birthInfo;
-      console.log('✅ 使用当前请求的birthInfo:', birthData);
+      console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
+      // 清除缓存中的旧数据，避免污染
+      if (requestData.sessionId) {
+        birthDataCache.delete(requestData.sessionId);
+        console.log('🗑️ 已清除缓存中的旧出生数据');
+      }
     } else if (!birthData && requestData.sessionId) {
       // 仅在没有birthInfo时，才从缓存获取
       const cachedBirthData = birthDataCache.get(requestData.sessionId);
@@ -155,7 +156,7 @@ router.post('/chat', async (req: Request, res: Response) => {
         
         console.log('🔍 最终birthData:', birthData);
         
-        // 如果没有找到出生信息，仅尝试从缓存获取（禁用context提取）
+        // 如果没有找到出生信息，仅尝试从缓存获取（完全禁用context提取）
         if (!birthData) {
           // 尝试从缓存获取（但仅在没有当前birthInfo的情况下）
           if (requestData.sessionId) {
@@ -166,7 +167,8 @@ router.post('/chat', async (req: Request, res: Response) => {
             }
           }
           
-          // 注意：不再从context中提取数据，避免污染
+          // 完全禁用context提取，避免AI格式示例污染
+          console.log('⚠️ 已禁用context提取，避免AI格式示例污染真实数据');
         }
         
         console.log('🔍 最终出生数据:', birthData);
