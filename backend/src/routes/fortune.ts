@@ -153,10 +153,18 @@ router.post('/chat', async (req: Request, res: Response) => {
       if (requestData.birthInfo) {
         birthData = requestData.birthInfo;
         console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
-        // 清除缓存中的旧数据，避免污染
-        if (requestData.sessionId) {
-          birthDataCache.delete(requestData.sessionId);
-          console.log('🗑️ 已清除缓存中的旧出生数据');
+        
+        // 检查是否为关系分析请求，如果是则不应该清除缓存
+        const isRelationshipAnalysis = checkIfRelationshipAnalysis(requestData.question || '', requestData.context || '');
+        
+        if (!isRelationshipAnalysis) {
+          // 只有非关系分析时才清除缓存，避免丢失用户的原始出生信息
+          if (requestData.sessionId) {
+            birthDataCache.delete(requestData.sessionId);
+            console.log('🗑️ 已清除缓存中的旧出生数据（非关系分析）');
+          }
+        } else {
+          console.log('💖 保留缓存中的出生数据（关系分析场景）');
         }
       } else if (!birthData && requestData.sessionId) {
         // 仅在没有birthInfo时，才从缓存获取

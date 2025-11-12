@@ -1,14 +1,24 @@
+export interface BirthInfo {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  gender?: string;
+  timezone?: string;
+}
+
 export interface FortuneRequest {
   question: string;
   type: 'tarot' | 'bazi' | 'astrology' | 'numerology';
-  birthInfo?: {
-    year: number;
-    month: number;
-    day: number;
-    hour: number;
-    minute: number;
+  birthInfo?: BirthInfo;
+  birthInfos?: {
+    self?: BirthInfo;
+    other?: BirthInfo;
   };
   userId?: string;
+  sessionId?: string;
+  context?: string;
 }
 
 export interface FortuneResponse {

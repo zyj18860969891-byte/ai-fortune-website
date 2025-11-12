@@ -78,31 +78,87 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
         sessionId: `session-${Date.now()}`
       };
       
-      // 尝试从上下文中获取出生信息（仅从用户消息中提取）
-      let contextBirthInfo = null;
-      if (!birthInfo) {
-        console.log('🔍 当前消息未提取到出生信息，尝试从用户消息中查找');
-        // 只从用户消息中提取，避免从AI回复中提取错误信息
-        const userMessages = messages.slice(-10).filter(m => m.type === 'user');
-        if (userMessages.length > 0) {
-          const userContextText = userMessages.map(m => m.content).join(' ');
-          contextBirthInfo = extractBirthInfo(userContextText);
-          console.log('🔍 从用户消息中提取的出生信息:', contextBirthInfo);
-        } else {
-          console.log('⚠️ 没有找到用户消息，无法从上下文提取出生信息');
-        }
-      }
+      // 检查是否为关系分析请求
+      const isRelationshipAnalysis = checkIfRelationshipAnalysis(userMessage.content, requestBody.context);
+      console.log('🔍 是否为关系分析请求:', isRelationshipAnalysis);
       
-      // 优先使用当前消息提取的birthInfo，否则使用上下文提取的
-      const finalBirthInfo = birthInfo || contextBirthInfo;
-      if (finalBirthInfo) {
-        requestBody.birthInfo = finalBirthInfo;
-        console.log('✅ 添加birthInfo到请求:', { 
-          source: birthInfo ? '当前消息' : '上下文',
-          birthInfo: finalBirthInfo 
-        });
+      if (isRelationshipAnalysis) {
+        console.log('💑 检测到关系分析请求，准备双人出生信息');
+        
+        // 提取自己的出生数据
+        let selfBirthInfo = null;
+        if (birthInfo) {
+          selfBirthInfo = birthInfo;
+          console.log('✅ 使用当前消息提取的birthInfo作为self:', selfBirthInfo);
+        } else {
+          // 从历史用户消息中查找自己的出生信息
+          const userMessages = messages.slice(-20).filter(m => m.type === 'user');
+          for (const userMsg of userMessages) {
+            const extracted = extractBirthInfo(userMsg.content);
+            if (extracted) {
+              selfBirthInfo = extracted;
+              console.log('✅ 从历史用户消息中找到自己的出生信息:', selfBirthInfo);
+              break;
+            }
+          }
+        }
+        
+        // 提取对方的出生数据
+        let otherBirthInfo = extractOtherBirthData(userMessage.content);
+        if (otherBirthInfo) {
+          console.log('✅ 提取对方的出生数据:', otherBirthInfo);
+        }
+        
+        // 构建birthInfos对象
+        const birthInfos: any = {};
+        if (selfBirthInfo) {
+          birthInfos.self = selfBirthInfo;
+        }
+        if (otherBirthInfo) {
+          birthInfos.other = otherBirthInfo;
+        }
+        
+        if (Object.keys(birthInfos).length > 0) {
+          requestBody.birthInfos = birthInfos;
+          // 如果同时有自己和对方的信息，删除单独的birthInfo字段
+          delete requestBody.birthInfo;
+          console.log('✅ 添加birthInfos到请求:', birthInfos);
+          console.log('🗑️ 删除单独的birthInfo字段，避免覆盖逻辑');
+        } else {
+          console.log('⚠️ 未找到双人出生信息，尝试单人分析');
+          // 回退到单人分析
+          if (birthInfo) {
+            requestBody.birthInfo = birthInfo;
+            console.log('✅ 回退：添加birthInfo到请求:', birthInfo);
+          }
+        }
       } else {
-        console.log('⚠️ 未提取到birthInfo，发送的请求体:', requestBody);
+        // 尝试从上下文中获取出生信息（仅从用户消息中提取）
+        let contextBirthInfo = null;
+        if (!birthInfo) {
+          console.log('🔍 当前消息未提取到出生信息，尝试从用户消息中查找');
+          // 只从用户消息中提取，避免从AI回复中提取错误信息
+          const userMessages = messages.slice(-10).filter(m => m.type === 'user');
+          if (userMessages.length > 0) {
+            const userContextText = userMessages.map(m => m.content).join(' ');
+            contextBirthInfo = extractBirthInfo(userContextText);
+            console.log('🔍 从用户消息中提取的出生信息:', contextBirthInfo);
+          } else {
+            console.log('⚠️ 没有找到用户消息，无法从上下文提取出生信息');
+          }
+        }
+        
+        // 优先使用当前消息提取的birthInfo，否则使用上下文提取的
+        const finalBirthInfo = birthInfo || contextBirthInfo;
+        if (finalBirthInfo) {
+          requestBody.birthInfo = finalBirthInfo;
+          console.log('✅ 添加birthInfo到请求:', { 
+            source: birthInfo ? '当前消息' : '上下文',
+            birthInfo: finalBirthInfo 
+          });
+        } else {
+          console.log('⚠️ 未提取到birthInfo，发送的请求体:', requestBody);
+        }
       }
       
       const response = await fetch(`/api/fortune/chat`, {
@@ -299,3 +355,78 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
     </div>
   );
 };
+
+// 检查是否为关系分析请求
+function checkIfRelationshipAnalysis(question: string, context: string): boolean {
+  const relationshipKeywords = [
+    '喜欢', '爱', '感情', '恋爱', '婚姻', '配偶', '对象', '男朋友', '女朋友',
+    '结婚', '缘分', '合婚', '配对', '两个人', '你们', '我和他', '我和她',
+    '对方', '恋人', '情侣', '交往', '追求', '暗恋', '心动', 'crush'
+  ];
+  
+  const fullText = (question + ' ' + context).toLowerCase();
+  const foundKeywords = relationshipKeywords.filter(keyword => 
+    fullText.includes(keyword.toLowerCase())
+  );
+  
+  return foundKeywords.length > 0;
+}
+
+// 提取对方的出生数据
+function extractOtherBirthData(question: string): any {
+  // 在问题中查找对方的出生信息
+  const otherPatterns = [
+    // "我喜欢一个1989.07.18的女人" -> 提取1989.07.18
+    /喜欢.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /爱.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /一个.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2}).*?的.*?人/g,
+    /(\d{4})年(\d{1,2})月(\d{1,2})日.*?的.*?人/g,
+    // "1989.07.18的女人" -> 提取1989.07.18
+    /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2}).*?(女人|男人|女孩|男孩|女生|男生)/g,
+    /(女人|男人|女孩|男孩|女生|男生).*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    // "她/他出生于1989.07.18" -> 提取1989.07.18
+    /(她|他|对方|那个他|那个她).*?出生.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /(她|他|对方|那个他|那个她).*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    // "1989年7月18日出生" -> 提取1989.07.18
+    /(\d{4})年(\d{1,2})月(\d{1,2})日.*?出生/g,
+    /出生于.*?(\d{4})年(\d{1,2})月(\d{1,2})日/g
+  ];
+  
+  for (const pattern of otherPatterns) {
+    const match = pattern.exec(question);
+    if (match) {
+      let year, month, day;
+      
+      if (pattern.source.includes('年') && pattern.source.includes('月') && pattern.source.includes('日')) {
+        // 中文格式：1989年7月18日
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      } else {
+        // 标准格式：1989.07.18
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      }
+      
+      // 验证日期的合理性
+      if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        console.log('✅ 从问题中提取对方出生日期:', { year, month, day });
+        return {
+          year,
+          month,
+          day,
+          hour: 0,
+          minute: 0,
+          gender: 'female', // 默认女性，可根据上下文调整
+          timezone: 'Asia/Shanghai'
+        };
+      }
+    }
+  }
+  
+  return null;
+}
+
+export default WeChatChatInterface;
