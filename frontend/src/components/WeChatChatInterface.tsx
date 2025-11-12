@@ -78,10 +78,23 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
         sessionId: `session-${Date.now()}`
       };
       
-      // 如果提取到出生信息，添加到请求中
-      if (birthInfo) {
-        requestBody.birthInfo = birthInfo;
-        console.log('✅ 添加birthInfo到请求:', birthInfo);
+      // 尝试从上下文中获取出生信息
+      let contextBirthInfo = null;
+      if (!birthInfo) {
+        console.log('🔍 当前消息未提取到出生信息，尝试从上下文中查找');
+        const contextText = messages.slice(-10).map(m => m.content).join(' ');
+        contextBirthInfo = extractBirthInfo(contextText);
+        console.log('🔍 从上下文提取的出生信息:', contextBirthInfo);
+      }
+      
+      // 优先使用当前消息提取的birthInfo，否则使用上下文提取的
+      const finalBirthInfo = birthInfo || contextBirthInfo;
+      if (finalBirthInfo) {
+        requestBody.birthInfo = finalBirthInfo;
+        console.log('✅ 添加birthInfo到请求:', { 
+          source: birthInfo ? '当前消息' : '上下文',
+          birthInfo: finalBirthInfo 
+        });
       } else {
         console.log('⚠️ 未提取到birthInfo，发送的请求体:', requestBody);
       }
