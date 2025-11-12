@@ -125,8 +125,8 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
   const extractBirthInfo = (text: string) => {
     // 匹配日期格式：1990.05.15 或 1990年5月15日 或 1990/5/15
     const datePatterns = [
-      /(\d{4})[年./](\d{1,2})[月./](\d{1,2})/g,
-      /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})/g
+      /(\d{4})[年./](\d{1,2})[月./](\d{1,2})/,
+      /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})/
     ];
     
     for (const pattern of datePatterns) {
