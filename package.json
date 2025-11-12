@@ -12,11 +12,17 @@
     "vercel-build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
-    "express": "^4.18.2",
+    "axios": "^1.13.2",
     "cors": "^2.8.5",
+    "express": "^4.18.2",
     "node-fetch": "^3.3.2"
   },
-  "keywords": ["ai", "fortune", "modelscope", "inference"],
+  "keywords": [
+    "ai",
+    "fortune",
+    "modelscope",
+    "inference"
+  ],
   "author": "AI Assistant",
   "license": "MIT"
 }
