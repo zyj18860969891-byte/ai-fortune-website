@@ -426,6 +426,7 @@ if (!SKIP_LOCAL_ROUTES) {
     console.log(`🔮 AI占卜请求 - 类型: ${type}, 问题: ${question}, 会话ID: ${sessionId}`);
     console.log(`📝 上下文信息:`, context);
     console.log(`🔧 收到birthInfo:`, birthInfo);
+    console.log(`🔧 birthInfo类型:`, typeof birthInfo, '是否为对象:', typeof birthInfo === 'object', '是否为null:', birthInfo === null);
     
     // 注意：完全禁用从上下文提取出生数据，避免AI格式示例污染
     // 仅使用当前请求的birthInfo或从问题中提取
@@ -434,7 +435,7 @@ if (!SKIP_LOCAL_ROUTES) {
     
     // 优先级：当前请求birthInfo > 从问题中提取 > 缓存数据
     // 绝对优先使用当前请求的birthInfo
-    if (birthInfo) {
+    if (birthInfo && birthInfo.year && birthInfo.month && birthInfo.day) {
       birthData = birthInfo;
       console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
       // 清除缓存中的旧数据，避免污染
@@ -443,6 +444,7 @@ if (!SKIP_LOCAL_ROUTES) {
         console.log('🗑️ 已清除缓存中的旧出生数据');
       }
     } else {
+      console.log('⚠️ birthInfo无效或缺失，尝试从问题中提取');
       // 如果没有birthInfo，尝试从问题中提取
       birthData = extractBirthDataFromQuestion(question);
       console.log('🔍 从问题中提取出生数据:', birthData);

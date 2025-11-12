@@ -68,6 +68,7 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
     try {
       // 提取出生信息（如果用户输入了日期）
       const birthInfo = extractBirthInfo(inputText.trim());
+      console.log('🔍 前端提取出生信息:', { inputText: inputText.trim(), birthInfo });
       
       // 调用AI占卜API - 使用相对路径触发Vercel重写规则
       const requestBody: any = {
@@ -80,6 +81,9 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
       // 如果提取到出生信息，添加到请求中
       if (birthInfo) {
         requestBody.birthInfo = birthInfo;
+        console.log('✅ 添加birthInfo到请求:', birthInfo);
+      } else {
+        console.log('⚠️ 未提取到birthInfo，发送的请求体:', requestBody);
       }
       
       const response = await fetch(`/api/fortune/chat`, {
