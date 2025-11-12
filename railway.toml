@@ -13,12 +13,16 @@ startCommand = "node start-railway-js-only.js"
 
 [environments.production]
 NODE_ENV = "production"
-PORT = "8080"
+PORT = "3001"
 # ModelScope配置
-MODELSCOPE_TOKEN = "ms-bf1291c1-c1ed-464c-b8d8-162fdee96180"
-MODELSCOPE_MODEL_ID = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+MODELSCOPE_API_KEY = "ms-bf1291c1-c1ed-464c-b8d8-162fdee96180"
+MODELSCOPE_MODEL = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+MODELSCOPE_BASE_URL = "https://api-inference.modelscope.cn/v1"
+# MCP服务配置
+BAZI_MCP_URL = "https://mcp.api-inference.modelscope.net/6a57768488dc47/mcp"
+BAZI_MCP_TIMEOUT = "15000"
 
 # 强制使用 Node.js 18 和指定端口
 [build.environment]
 NIXPACKS_NODE = "18"
-PORT = "8080"
+PORT = "3001"

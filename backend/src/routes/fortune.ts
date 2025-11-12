@@ -45,9 +45,16 @@ router.post('/chat', async (req: Request, res: Response) => {
     
     // 检查是否为双人八字分析请求
     const isRelationshipAnalysis = checkIfRelationshipAnalysis(requestData.question || '', requestData.context || '');
-    console.log('🔍 是否为关系分析请求:', isRelationshipAnalysis);
     
-    if (isRelationshipAnalysis || requestData.birthInfos) {
+    // 检查是否在询问关系但没有明确关键词（如"我们之间合适吗？"）
+    const isImplicitRelationship = checkIfImplicitRelationship(requestData.question || '', requestData.context || '');
+    
+    console.log('🔍 是否为关系分析请求:', isRelationshipAnalysis);
+    console.log('🔍 是否为隐式关系分析请求:', isImplicitRelationship);
+    
+    const shouldDoRelationshipAnalysis = isRelationshipAnalysis || isImplicitRelationship;
+    
+    if (shouldDoRelationshipAnalysis || requestData.birthInfos) {
       // 双人八字分析逻辑
       console.log('💑 检测到双人关系分析请求或显式birthInfos');
       
@@ -507,6 +514,39 @@ router.get('/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// 检查是否为隐式关系分析请求（如"我们之间合适吗？"）
+function checkIfImplicitRelationship(question: string, context: string): boolean {
+  const implicitRelationshipKeywords = [
+    '我们', '你们', '他们', '彼此', '双方', '两人', '两个人',
+    '合适', '配', '般配', '匹配', '缘分', '情缘', '感情',
+    '恋爱', '婚姻', '婚配', '合婚', '配对'
+  ];
+  
+  const fullText = (question + ' ' + context).toLowerCase();
+  const foundKeywords = implicitRelationshipKeywords.filter(keyword => 
+    fullText.includes(keyword.toLowerCase())
+  );
+  
+  console.log('🔍 隐式关系分析关键词检测:', {
+    foundKeywords,
+    isImplicitRelationship: foundKeywords.length > 0,
+    question: question.substring(0, 100),
+    contextPreview: context.substring(0, 100)
+  });
+  
+  // 检查是否有"我们" + 关系相关词的组合
+  const hasWeRelationship = fullText.includes('我们') && foundKeywords.length >= 2;
+  
+  // 检查是否有明显的配对询问
+  const hasPairingInquiry = fullText.includes('合适') || 
+                           fullText.includes('配吗') || 
+                           fullText.includes('般配') ||
+                           fullText.includes('匹配') ||
+                           fullText.includes('缘分');
+  
+  return hasWeRelationship || hasPairingInquiry;
+}
 
 // 检查是否为关系分析请求
 function checkIfRelationshipAnalysis(question: string, context: string): boolean {

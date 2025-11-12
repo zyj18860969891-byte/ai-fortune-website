@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 8080;
 
 console.log('🔧 使用端口:', PORT);
 console.log('🔧 部署环境:', process.env.NODE_ENV || 'development');
-console.log('🤖 使用 ModelScope:', process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507');
+console.log('🤖 使用 ModelScope:', process.env.MODELSCOPE_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507');
 
 // 启用 CORS
 app.use(cors({
@@ -87,8 +87,8 @@ try {
   const MsAgentMcp = MsAgentMcpModule && (MsAgentMcpModule.MsAgentStyleMcpService || MsAgentMcpModule.default || MsAgentMcpModule);
   if (RealModelScope && MsAgentMcp) {
     // 默认值（如未设置环境变量则使用你指定的值）
-    const defaultModelId = process.env.MODELSCOPE_MODEL_ID || process.env.MODELSCOPE_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
-    const defaultApiKey = process.env.MODELSCOPE_API_KEY || process.env.MODELSCOPE_TOKEN || 'ms-bf1291c1-c1ed-464c-b8d8-162fdee96180';
+    const defaultModelId = process.env.MODELSCOPE_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
+    const defaultApiKey = process.env.MODELSCOPE_API_KEY || 'ms-bf1291c1-c1ed-464c-b8d8-162fdee96180';
     const modelConfig = {
       apiKey: defaultApiKey,
       modelId: defaultModelId,
@@ -607,7 +607,7 @@ if (!SKIP_LOCAL_SERVER) {
     console.log(`🌐 Frontend: ${baseUrl}`);
     console.log(`🔍 Health Check: ${baseUrl}/health`);
     console.log(`🔧 Environment Check: ${baseUrl}/api/env`);
-    console.log(`🤖 Using ModelScope: ${process.env.MODELSCOPE_MODEL_ID || 'Qwen/Qwen3-235B-A22B-Instruct-2507'}`);
+    console.log(`🤖 Using ModelScope: ${process.env.MODELSCOPE_MODEL || 'Qwen/Qwen3-235B-A22B-Instruct-2507'}`);
     console.log(`📝 纯JavaScript版本，智能本地分析`);
   });
 }
