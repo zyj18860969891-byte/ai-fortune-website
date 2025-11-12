@@ -8,7 +8,8 @@ const router = Router();
 const mcpService = MsAgentStyleMcpService.getInstance();
 
 // 全局出生日期缓存，用于跨请求保存出生信息
-const birthDataCache = new Map<string, any>();
+// 支持单人和双人八字分析：sessionId -> { self: birthData, other: birthData }
+const birthDataCache = new Map<string, { self?: any, other?: any }>();
 
 
 
@@ -36,196 +37,230 @@ router.post('/chat', async (req: Request, res: Response) => {
     });
 
     let baziData = null;
-    let birthData = requestData.birthInfo || extractBirthDataFromQuestion(requestData.question || '');
+    let selfBirthData = null;
+    let otherBirthData = null;
     let analysisType = 'general';
     
-    console.log('🔍 初始birthData提取结果:', birthData);
-    console.log('🔧 birthData类型检查:', {
-      hasBirthData: !!birthData,
-      birthDataKeys: birthData ? Object.keys(birthData) : null,
-      hasYear: !!birthData?.year,
-      hasMonth: !!birthData?.month,
-      hasDay: !!birthData?.day
-    });
-    console.log('🔧 birthData类型检查:', {
-      hasBirthData: !!birthData,
-      birthDataKeys: birthData ? Object.keys(birthData) : null,
-      hasYear: !!birthData?.year,
-      hasMonth: !!birthData?.month,
-      hasDay: !!birthData?.day
-    });
+    console.log('🔍 开始提取出生数据，检查是否为双人分析请求...');
     
-    // 注意：完全禁用从上下文提取出生数据，避免AI格式示例污染
-    // 仅使用当前请求的birthInfo或从问题中提取
-    console.log('⚠️ 已禁用上下文出生数据提取，避免AI格式示例污染');
+    // 检查是否为双人八字分析请求
+    const isRelationshipAnalysis = checkIfRelationshipAnalysis(requestData.question || '', requestData.context || '');
+    console.log('🔍 是否为关系分析请求:', isRelationshipAnalysis);
     
-    // 优先级：当前请求birthInfo > 从问题中提取 > 缓存数据
-    // 绝对优先使用当前请求的birthInfo
-    if (requestData.birthInfo) {
-      birthData = requestData.birthInfo;
-      console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
-      // 清除缓存中的旧数据，避免污染
+    if (isRelationshipAnalysis || requestData.birthInfos) {
+      // 双人八字分析逻辑
+      console.log('💑 检测到双人关系分析请求或显式birthInfos');
+      
+      // 优先级：当前请求birthInfos > 当前请求birthInfo > 从问题中提取 > 缓存数据
+      // 1. 首先检查是否有显式的birthInfos
+      if (requestData.birthInfos?.self) {
+        selfBirthData = requestData.birthInfos.self;
+        console.log('✅ 使用birthInfos.self（最高优先级）:', selfBirthData);
+      } else if (requestData.birthInfos?.other) {
+        otherBirthData = requestData.birthInfos.other;
+        console.log('✅ 使用birthInfos.other（最高优先级）:', otherBirthData);
+      } else if (requestData.birthInfo) {
+        // 2. 如果是关系分析且没有self数据，将birthInfo作为self
+        if (!selfBirthData) {
+          selfBirthData = requestData.birthInfo;
+          console.log('✅ 使用当前请求的birthInfo作为self:', selfBirthData);
+        }
+      } else {
+        // 3. 从问题中提取自己的出生数据
+        selfBirthData = extractBirthDataFromQuestion(requestData.question || '');
+        if (selfBirthData) {
+          console.log('✅ 从问题中提取自己的出生数据:', selfBirthData);
+        }
+      }
+      
+      // 提取对方的出生数据（如果还没有）
+      if (!otherBirthData) {
+        otherBirthData = extractOtherBirthData(requestData.question || '', requestData.context || '');
+        if (otherBirthData) {
+          console.log('✅ 提取对方的出生数据:', otherBirthData);
+        }
+      }
+      
+      // 从缓存中获取历史数据（不覆盖已有的数据）
       if (requestData.sessionId) {
-        birthDataCache.delete(requestData.sessionId);
-        console.log('🗑️ 已清除缓存中的旧出生数据');
+        const cachedData = birthDataCache.get(requestData.sessionId);
+        if (cachedData) {
+          console.log('🔧 从缓存获取历史出生数据:', { 
+            hasSelf: !!cachedData.self, 
+            hasOther: !!cachedData.other,
+            sessionId: requestData.sessionId 
+          });
+          
+          // 如果当前没有提供自己的数据，使用缓存的
+          if (!selfBirthData && cachedData.self) {
+            selfBirthData = cachedData.self;
+            console.log('✅ 使用缓存中的自己出生数据');
+          }
+          
+          // 如果当前没有提供对方数据，使用缓存的
+          if (!otherBirthData && cachedData.other) {
+            otherBirthData = cachedData.other;
+            console.log('✅ 使用缓存中的对方出生数据');
+          }
+        }
       }
-    } else if (!birthData && requestData.sessionId) {
-      // 仅在没有birthInfo时，才从缓存获取
-      const cachedBirthData = birthDataCache.get(requestData.sessionId);
-      if (cachedBirthData) {
-        birthData = cachedBirthData;
-        console.log('🔧 从缓存获取出生数据:', { sessionId: requestData.sessionId, birthData });
+      
+      // 保存到缓存（只保存新的数据，不覆盖现有的）
+      if (requestData.sessionId && (selfBirthData || otherBirthData)) {
+        const cachedData = birthDataCache.get(requestData.sessionId) || {};
+        
+        // 只在有新数据且缓存中没有时才更新
+        if (selfBirthData && !cachedData.self) {
+          cachedData.self = selfBirthData;
+          console.log('✅ 保存新的自己出生数据到缓存');
+        }
+        
+        if (otherBirthData && !cachedData.other) {
+          cachedData.other = otherBirthData;
+          console.log('✅ 保存新的对方出生数据到缓存');
+        }
+        
+        birthDataCache.set(requestData.sessionId, cachedData);
+        console.log('💾 更新出生数据到缓存:', { 
+          sessionId: requestData.sessionId,
+          hasSelf: !!cachedData.self,
+          hasOther: !!cachedData.other
+        });
       }
+      
+      console.log('💑 双人分析数据汇总:', {
+        hasSelf: !!selfBirthData,
+        hasOther: !!otherBirthData,
+        selfData: selfBirthData,
+        otherData: otherBirthData
+      });
+      
+    } else {
+      // 单人八字分析逻辑
+      let birthData = requestData.birthInfo || extractBirthDataFromQuestion(requestData.question || '');
+      
+      console.log('🔍 初始birthData提取结果:', birthData);
+      console.log('🔧 birthData类型检查:', {
+        hasBirthData: !!birthData,
+        birthDataKeys: birthData ? Object.keys(birthData) : null,
+        hasYear: !!birthData?.year,
+        hasMonth: !!birthData?.month,
+        hasDay: !!birthData?.day
+      });
+      
+      // 优先级：当前请求birthInfo > 从问题中提取 > 缓存数据
+      // 绝对优先使用当前请求的birthInfo
+      if (requestData.birthInfo) {
+        birthData = requestData.birthInfo;
+        console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
+        // 清除缓存中的旧数据，避免污染
+        if (requestData.sessionId) {
+          birthDataCache.delete(requestData.sessionId);
+          console.log('🗑️ 已清除缓存中的旧出生数据');
+        }
+      } else if (!birthData && requestData.sessionId) {
+        // 仅在没有birthInfo时，才从缓存获取
+        const cachedBirthData = birthDataCache.get(requestData.sessionId);
+        if (cachedBirthData) {
+          birthData = cachedBirthData.self || cachedBirthData;
+          console.log('🔧 从缓存获取出生数据:', { sessionId: requestData.sessionId, birthData });
+        }
+      }
+      
+      selfBirthData = birthData;
     }
     
     // 只要用户请求八字分析（type: 'bazi'），就调用八字MCP服务
     if (requestData.type === 'bazi') {
       try {
         console.log('🔮 调用@cantian-ai/Bazi-MCP服务（聊天模式）...');
-        console.log('🔍 当前birthData:', birthData);
         
-        // birthData已经通过上面的逻辑提取过了，不需要重复提取
-        if (!birthData) {
-          console.log('⚠️ 再次尝试提取出生数据');
-          birthData = requestData.birthInfo || extractBirthDataFromQuestion(requestData.question || '');
-        }
-        
-        console.log('🔍 最终birthData:', birthData);
-        
-        // 如果没有找到出生信息，仅尝试从缓存获取（完全禁用context提取）
-        if (!birthData) {
-          // 尝试从缓存获取（但仅在没有当前birthInfo的情况下）
-          if (requestData.sessionId) {
-            const cachedBirthData = birthDataCache.get(requestData.sessionId);
-            if (cachedBirthData) {
-              birthData = cachedBirthData;
-              console.log('🔧 从缓存获取出生数据:', { sessionId: requestData.sessionId, birthData });
-            }
-          }
+        // 双人分析逻辑
+        if (isRelationshipAnalysis && selfBirthData && otherBirthData) {
+          console.log('💑 双人八字分析：同时计算两个人的八字');
+          analysisType = 'bazi-relationship';
           
-          // 完全禁用context提取，避免AI格式示例污染
-          console.log('⚠️ 已禁用context提取，避免AI格式示例污染真实数据');
+          try {
+            // 计算自己的八字
+            const selfBaziResult = await mcpService.calculateBazi(selfBirthData);
+            console.log('📊 自己的八字MCP计算结果:', {
+              success: selfBaziResult.success,
+              hasData: !!selfBaziResult.data
+            });
+            
+            // 计算对方的八字
+            const otherBaziResult = await mcpService.calculateBazi(otherBirthData);
+            console.log('📊 对方的八字MCP计算结果:', {
+              success: otherBaziResult.success,
+              hasData: !!otherBaziResult.data
+            });
+            
+            // 解析两个人的八字数据
+            let selfBaziData = null;
+            let otherBaziData = null;
+            
+            if (selfBaziResult.success && selfBaziResult.data) {
+              selfBaziData = parseBaziData(selfBaziResult);
+              console.log('✅ 自己的八字数据解析成功');
+            }
+            
+            if (otherBaziResult.success && otherBaziResult.data) {
+              otherBaziData = parseBaziData(otherBaziResult);
+              console.log('✅ 对方的八字数据解析成功');
+            }
+            
+            // 构建双人八字分析数据
+            if (selfBaziData && otherBaziData) {
+              baziData = {
+                self: selfBaziData,
+                other: otherBaziData,
+                relationship: {
+                  selfBirthData,
+                  otherBirthData
+                }
+              };
+              console.log('💑 双人八字分析数据构建完成');
+            } else {
+              console.log('⚠️ 双人八字数据不完整，回退到单人分析');
+              if (selfBaziData) {
+                baziData = selfBaziData;
+                analysisType = 'bazi-enhanced';
+              }
+            }
+            
+          } catch (relationshipError) {
+            console.log('⚠️ 双人八字分析失败，回退到单人分析:', relationshipError);
+            // 回退到单人分析
+            analysisType = 'bazi-enhanced';
+          }
         }
         
-        console.log('🔍 最终出生数据:', birthData);
+        // 单人分析逻辑
+        if (!baziData && selfBirthData) {
+          console.log('👤 单人八字分析：计算自己的八字');
+          analysisType = 'bazi-enhanced';
+          
+          try {
+            const baziResult = await mcpService.calculateBazi(selfBirthData);
+            console.log('� 单人八字MCP计算结果:', {
+              success: baziResult.success,
+              hasData: !!baziResult.data
+            });
+            
+            if (baziResult.success && baziResult.data) {
+              baziData = parseBaziData(baziResult);
+              console.log('✅ 单人八字数据解析成功');
+            }
+            
+          } catch (singleError) {
+            console.log('⚠️ 单人八字分析失败:', singleError);
+          }
+        }
         
-        // 如果没有找到出生信息，不调用八字MCP服务
-        if (!birthData) {
+        // 如果没有找到出生信息
+        if (!selfBirthData && !otherBirthData) {
           console.log('⚠️ 用户请求八字分析但未提供出生信息，需要用户提供出生日期');
           analysisType = 'bazi-requested-no-birthdata';
-        }
-        
-        if (birthData) {
-          console.log('🔮 准备调用MCP服务，出生数据:', birthData);
-          try {
-            const baziResult = await mcpService.calculateBazi(birthData);
-            console.log('📊 MCP服务调用结果:', baziResult);
-            
-            if (baziResult.success) {
-              // 解析MCP返回的八字数据 - 增强解析逻辑处理格式异常
-              try {
-                console.log('📄 MCP原始响应:', baziResult);
-                console.log('🔍 检查baziResult.data:', baziResult.data);
-                console.log('🔍 检查baziResult.content:', baziResult.content);
-                
-                // MCP服务返回的数据结构：{ success: true, data: { 八字, 生肖, 日主, ... } }
-                console.log('🔍 详细检查baziResult.data:', {
-                  '存在': !!baziResult.data,
-                  '类型': typeof baziResult.data,
-                  '是否为对象': typeof baziResult.data === 'object',
-                  '是否为数组': Array.isArray(baziResult.data),
-                  '是否为null': baziResult.data === null,
-                  '是否为undefined': baziResult.data === undefined,
-                  '是否有八字属性': baziResult.data && ('八字' in baziResult.data || '八字' in (baziResult.data.八字 || {})),
-                  '是否有生肖属性': baziResult.data && '生肖' in baziResult.data,
-                  '是否有日主属性': baziResult.data && '日主' in baziResult.data
-                });
-                
-                // 增强的条件检查 - 处理格式异常情况
-                if (baziResult.data && 
-                    typeof baziResult.data === 'object' && 
-                    !Array.isArray(baziResult.data)) {
-                  
-                  // 检查是否有八字相关数据（支持多种格式）- 修复检查逻辑
-                  const hasBaziData = (
-                    baziResult.data && ('八字' in baziResult.data || baziResult.data.八字 || baziResult.data['八字']) ||
-                    (baziResult.data && baziResult.data.八字) ||
-                    (baziResult.data && baziResult.data.data && ('八字' in baziResult.data.data || baziResult.data.data.八字)) ||
-                    (baziResult.data && baziResult.data.content && typeof baziResult.data.content === 'string' && (baziResult.data.content.includes('八字') || baziResult.data.content.includes('生肖') || baziResult.data.content.includes('日主')))
-                  );
-                  
-                  if (hasBaziData) {
-                    // 处理嵌套数据结构
-                    if (baziResult.data.data && baziResult.data.data.八字) {
-                      baziData = baziResult.data.data;
-                    } else if (baziResult.data.content && typeof baziResult.data.content === 'string') {
-                      try {
-                        // 尝试解析content中的JSON
-                        const parsedContent = JSON.parse(baziResult.data.content);
-                        baziData = parsedContent;
-                      } catch {
-                        // 如果解析失败，直接使用原始data
-                        baziData = baziResult.data;
-                      }
-                    } else {
-                      baziData = baziResult.data;
-                    }
-                    
-                    analysisType = 'bazi-enhanced';
-                    console.log('✅ 聊天模式八字MCP计算成功');
-                    console.log('📊 八字数据:', {
-                      '八字': baziData.八字,
-                      '生肖': baziData.生肖,
-                      '日主': baziData.日主,
-                      '阳历': baziData.阳历
-                    });
-                  } else {
-                    console.log('⚠️ MCP返回数据中没有找到八字相关信息');
-                    baziData = null;
-                  }
-                } else if (baziResult.content) {
-                  // 如果content字段存在，尝试解析为JSON
-                  try {
-                    baziData = JSON.parse(baziResult.content);
-                    console.log('✅ 从content字段解析成功');
-                    console.log('🔍 解析后的baziData:', baziData);
-                  } catch (contentError) {
-                    console.log('⚠️ content字段JSON解析失败:', contentError);
-                    baziData = null;
-                  }
-                } else {
-                  console.log('⚠️ MCP返回数据格式异常，尝试直接使用data字段:', baziResult);
-                  // 备用逻辑：如果检查失败，直接尝试使用data字段
-                  if (baziResult.data && typeof baziResult.data === 'object') {
-                    baziData = baziResult.data;
-                    analysisType = 'bazi-enhanced';
-                    console.log('✅ 使用备用逻辑成功设置八字数据');
-                    console.log('📊 备用八字数据:', {
-                      '八字': baziData.八字,
-                      '生肖': baziData.生肖,
-                      '日主': baziData.日主,
-                      '阳历': baziData.阳历
-                    });
-                  } else {
-                    baziData = null;
-                  }
-                }
-                
-                console.log('🔍 最终baziData值:', baziData);
-                console.log('🔍 baziData类型:', typeof baziData);
-                console.log('🔍 baziData是否为null:', baziData === null);
-              } catch (parseError) {
-                console.log('⚠️ 八字数据解析失败:', parseError);
-                baziData = null;
-              }
-            } else {
-              console.log('⚠️ 八字MCP计算失败:', baziResult.message);
-            }
-          } catch (serviceError) {
-            console.log('❌ MCP服务调用异常:', serviceError);
-          }
-        } else {
-          console.log('⚠️ 未找到有效的生辰数据');
         }
       } catch (error: any) {
         console.warn('⚠️ 聊天模式八字MCP调用失败:', error);
@@ -253,7 +288,7 @@ router.post('/chat', async (req: Request, res: Response) => {
     let enhancedQuestion = requestData.question;
     let systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。请输入您的问题，我会为您提供专业的占卜分析和建议。';
     
-    if (!birthData && requestData.type === 'bazi') {
+    if (!selfBirthData && requestData.type === 'bazi') {
       // 用户请求八字分析但未提供出生信息 - 明确要求用户提供
       enhancedQuestion = requestData.question;
       systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。要进行准确的八字分析，请先提供您的出生日期（如：1990.05.15 或 1990年5月15日），然后再告诉我您想了解什么问题。';
@@ -305,7 +340,7 @@ ${Object.entries(baziData.神煞 || {}).map(([key, value]: [string, any]) =>
     } else if (requestData.type === 'bazi') {
       // 智能判断：确实没有出生信息时的处理
       const hasAnyBirthInfo = extractBirthDataFromQuestion(requestData.question);
-      if (!hasAnyBirthInfo && !birthData) {
+      if (!hasAnyBirthInfo && !selfBirthData) {
         // 明确没有出生信息时，要求用户提供
         enhancedQuestion = requestData.question;
         systemPrompt = '占卜师: 您好！我是八字命理AI占卜师。\n\n要进行准确的八字分析，需要您的出生信息。请提供：\n1. 出生日期（如：1996年2月10日 或 1996.02.10）\n2. 出生时间（如：上午10点 或 下午2点，如不知道可默认子时）\n3. 性别（男/女）\n\n提供这些信息后，我会为您进行专业的命理分析。';
@@ -464,6 +499,182 @@ router.get('/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString()
   });
 });
+
+// 检查是否为关系分析请求
+function checkIfRelationshipAnalysis(question: string, context: string): boolean {
+  const relationshipKeywords = [
+    '喜欢', '爱', '感情', '恋爱', '婚姻', '配偶', '对象', '男朋友', '女朋友',
+    '结婚', '缘分', '合婚', '配对', '两个人', '你们', '我和他', '我和她',
+    '对方', '恋人', '情侣', '交往', '追求', '暗恋', '心动', 'crush'
+  ];
+  
+  const fullText = (question + ' ' + context).toLowerCase();
+  const foundKeywords = relationshipKeywords.filter(keyword => 
+    fullText.includes(keyword.toLowerCase())
+  );
+  
+  console.log('🔍 关系分析关键词检测:', {
+    foundKeywords,
+    isRelationship: foundKeywords.length > 0,
+    question: question.substring(0, 100),
+    contextPreview: context.substring(0, 100)
+  });
+  
+  return foundKeywords.length > 0;
+}
+
+// 提取对方的出生数据
+function extractOtherBirthData(question: string, context: string): any {
+  console.log('🔍 开始提取对方出生数据...');
+  
+  // 在问题中查找对方的出生信息
+  const otherPatterns = [
+    // "我喜欢一个1989.07.18的女人" -> 提取1989.07.18
+    /喜欢.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /爱.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /一个.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2}).*?的.*?人/g,
+    /(\d{4})年(\d{1,2})月(\d{1,2})日.*?的.*?人/g,
+    // "1989.07.18的女人" -> 提取1989.07.18
+    /(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2}).*?(女人|男人|女孩|男孩|女生|男生)/g,
+    /(女人|男人|女孩|男孩|女生|男生).*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    // "她/他出生于1989.07.18" -> 提取1989.07.18
+    /(她|他|对方|那个他|那个她).*?出生.*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    /(她|他|对方|那个他|那个她).*?(\d{4})[\.\-\/](\d{1,2})[\.\-\/](\d{1,2})/g,
+    // "1989年7月18日出生" -> 提取1989.07.18
+    /(\d{4})年(\d{1,2})月(\d{1,2})日.*?出生/g,
+    /出生于.*?(\d{4})年(\d{1,2})月(\d{1,2})日/g
+  ];
+  
+  for (const pattern of otherPatterns) {
+    const match = pattern.exec(question);
+    if (match) {
+      let year, month, day;
+      
+      if (pattern.source.includes('年') && pattern.source.includes('月') && pattern.source.includes('日')) {
+        // 中文格式：1989年7月18日
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      } else {
+        // 标准格式：1989.07.18
+        year = parseInt(match[1]);
+        month = parseInt(match[2]);
+        day = parseInt(match[3]);
+      }
+      
+      // 验证日期的合理性
+      if (year >= 1900 && year <= 2100 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        console.log('✅ 从问题中提取对方出生日期:', { year, month, day });
+        return {
+          year,
+          month,
+          day,
+          hour: 0,
+          minute: 0,
+          gender: 'female', // 默认女性，可根据上下文调整
+          timezone: 'Asia/Shanghai'
+        };
+      }
+    }
+  }
+  
+  // 从上下文中查找对方的出生信息
+  const lines = context.split('\n');
+  for (const line of lines) {
+    if (line.includes('用户:') && line.includes('1989') || line.includes('1990') || line.includes('1988') || line.includes('1987')) {
+      const birthData = extractBirthDataFromQuestion(line.replace(/^用户:\s*/, ''));
+      if (birthData) {
+        console.log('✅ 从上下文中提取对方出生数据:', birthData);
+        return birthData;
+      }
+    }
+  }
+  
+  console.log('⚠️ 未找到对方的出生数据');
+  return null;
+}
+
+// 解析八字数据的工具函数
+function parseBaziData(baziResult: any): any {
+  console.log('📄 MCP原始响应:', baziResult);
+  console.log('🔍 检查baziResult.data:', baziResult.data);
+  console.log('🔍 检查baziResult.content:', baziResult.content);
+  
+  // MCP服务返回的数据结构：{ success: true, data: { 八字, 生肖, 日主, ... } }
+  console.log('🔍 详细检查baziResult.data:', {
+    '存在': !!baziResult.data,
+    '类型': typeof baziResult.data,
+    '是否为对象': typeof baziResult.data === 'object',
+    '是否为数组': Array.isArray(baziResult.data),
+    '是否为null': baziResult.data === null,
+    '是否为undefined': baziResult.data === undefined,
+    '是否有八字属性': baziResult.data && ('八字' in baziResult.data || baziResult.data.八字 || baziResult.data['八字']),
+    '是否有生肖属性': baziResult.data && '生肖' in baziResult.data,
+    '是否有日主属性': baziResult.data && '日主' in baziResult.data
+  });
+  
+  // 增强的条件检查 - 处理格式异常情况
+  if (baziResult.data && 
+      typeof baziResult.data === 'object' && 
+      !Array.isArray(baziResult.data)) {
+    
+    // 检查是否有八字相关数据（支持多种格式）- 修复检查逻辑
+    const hasBaziData = (
+      baziResult.data && ('八字' in baziResult.data || baziResult.data.八字 || baziResult.data['八字']) ||
+      (baziResult.data && baziResult.data.八卦) ||
+      (baziResult.data && baziResult.data.data && ('八字' in baziResult.data.data || baziResult.data.data.八卦)) ||
+      (baziResult.data && baziResult.data.content && typeof baziResult.data.content === 'string' && (baziResult.data.content.includes('八字') || baziResult.data.content.includes('生肖') || baziResult.data.content.includes('日主')))
+    );
+    
+    if (hasBaziData) {
+      // 处理嵌套数据结构
+      if (baziResult.data.data && baziResult.data.data.八字) {
+        return baziResult.data.data;
+      } else if (baziResult.data.content && typeof baziResult.data.content === 'string') {
+        try {
+          // 尝试解析content中的JSON
+          const parsedContent = JSON.parse(baziResult.data.content);
+          return parsedContent;
+        } catch {
+          // 如果解析失败，直接使用原始data
+          return baziResult.data;
+        }
+      } else {
+        return baziResult.data;
+      }
+    } else {
+      console.log('⚠️ MCP返回数据中没有找到八字相关信息');
+      return null;
+    }
+  } else if (baziResult.content) {
+    // 如果content字段存在，尝试解析为JSON
+    try {
+      const parsedContent = JSON.parse(baziResult.content);
+      console.log('✅ 从content字段解析成功');
+      console.log('🔍 解析后的baziData:', parsedContent);
+      return parsedContent;
+    } catch (contentError) {
+      console.log('⚠️ content字段JSON解析失败:', contentError);
+      return null;
+    }
+  } else {
+    console.log('⚠️ MCP返回数据格式异常，尝试直接使用data字段:', baziResult);
+    // 备用逻辑：如果检查失败，直接尝试使用data字段
+    if (baziResult.data && typeof baziResult.data === 'object') {
+      console.log('✅ 使用备用逻辑成功设置八字数据');
+      console.log('📊 备用八字数据:', {
+        '八字': baziResult.data.八字,
+        '生肖': baziResult.data.生肖,
+        '日主': baziResult.data.日主,
+        '阳历': baziResult.data.阳历
+      });
+      return baziResult.data;
+    } else {
+      return null;
+    }
+  }
+}
 
 // 工具函数
 function extractBirthDataFromContext(context: string): any {
