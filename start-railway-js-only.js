@@ -412,7 +412,7 @@ if (!SKIP_LOCAL_ROUTES) {
   // AI 占卜聊天接口 - 使用纯JavaScript智能分析
   app.post('/api/fortune/chat', async (req, res) => {
   try {
-    const { type, question, context, sessionId } = req.body;
+    const { type, question, context, sessionId, birthInfo } = req.body;
     
     // 参数验证
     if (!type || !question) {
@@ -425,23 +425,35 @@ if (!SKIP_LOCAL_ROUTES) {
 
     console.log(`🔮 AI占卜请求 - 类型: ${type}, 问题: ${question}, 会话ID: ${sessionId}`);
     console.log(`📝 上下文信息:`, context);
+    console.log(`🔧 收到birthInfo:`, birthInfo);
     
-    // 尝试从上下文提取出生日期并缓存
+    // 注意：完全禁用从上下文提取出生数据，避免AI格式示例污染
+    // 仅使用当前请求的birthInfo或从问题中提取
     let birthData = null;
-    if (context) {
-      const contextBirthData = extractAndCacheBirthData(context, sessionId);
-      if (contextBirthData) {
-        birthData = contextBirthData;
-        console.log('✅ 从上下文提取出生数据:', birthData);
-      }
-    }
+    console.log('⚠️ 已禁用上下文出生数据提取，避免AI格式示例污染');
     
-    // 如果当前请求没有出生数据，尝试从缓存获取
-    if (!birthData && sessionId) {
-      const cachedBirthData = birthDataCache.get(sessionId);
-      if (cachedBirthData) {
-        birthData = cachedBirthData;
-        console.log('🔧 从缓存获取出生数据:', { sessionId, birthData });
+    // 优先级：当前请求birthInfo > 从问题中提取 > 缓存数据
+    // 绝对优先使用当前请求的birthInfo
+    if (birthInfo) {
+      birthData = birthInfo;
+      console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
+      // 清除缓存中的旧数据，避免污染
+      if (sessionId) {
+        birthDataCache.delete(sessionId);
+        console.log('🗑️ 已清除缓存中的旧出生数据');
+      }
+    } else {
+      // 如果没有birthInfo，尝试从问题中提取
+      birthData = extractBirthDataFromQuestion(question);
+      console.log('🔍 从问题中提取出生数据:', birthData);
+      
+      // 如果还是没有，尝试从缓存获取
+      if (!birthData && sessionId) {
+        const cachedBirthData = birthDataCache.get(sessionId);
+        if (cachedBirthData) {
+          birthData = cachedBirthData;
+          console.log('🔧 从缓存获取出生数据:', { sessionId, birthData });
+        }
       }
     }
     
