@@ -435,7 +435,16 @@ if (!SKIP_LOCAL_ROUTES) {
     
     // 优先级：当前请求birthInfo > 从问题中提取 > 缓存数据
     // 绝对优先使用当前请求的birthInfo
-    if (birthInfo && birthInfo.year && birthInfo.month && birthInfo.day) {
+    if (birthInfo && 
+        birthInfo.year && 
+        birthInfo.month && 
+        birthInfo.day && 
+        !isNaN(birthInfo.year) && 
+        !isNaN(birthInfo.month) && 
+        !isNaN(birthInfo.day) &&
+        birthInfo.year >= 1900 && birthInfo.year <= 2100 &&
+        birthInfo.month >= 1 && birthInfo.month <= 12 &&
+        birthInfo.day >= 1 && birthInfo.day <= 31) {
       birthData = birthInfo;
       console.log('✅ 使用当前请求的birthInfo（最高优先级）:', birthData);
       // 清除缓存中的旧数据，避免污染
@@ -444,7 +453,15 @@ if (!SKIP_LOCAL_ROUTES) {
         console.log('🗑️ 已清除缓存中的旧出生数据');
       }
     } else {
-      console.log('⚠️ birthInfo无效或缺失，尝试从问题中提取');
+      console.log('⚠️ birthInfo无效或缺失，尝试从问题中提取。birthInfo:', birthInfo);
+      console.log('⚠️ birthInfo验证:', {
+        hasYear: !!(birthInfo && birthInfo.year),
+        hasMonth: !!(birthInfo && birthInfo.month),
+        hasDay: !!(birthInfo && birthInfo.day),
+        isYearValid: !!(birthInfo && birthInfo.year && !isNaN(birthInfo.year) && birthInfo.year >= 1900 && birthInfo.year <= 2100),
+        isMonthValid: !!(birthInfo && birthInfo.month && !isNaN(birthInfo.month) && birthInfo.month >= 1 && birthInfo.month <= 12),
+        isDayValid: !!(birthInfo && birthInfo.day && !isNaN(birthInfo.day) && birthInfo.day >= 1 && birthInfo.day <= 31)
+      });
       // 如果没有birthInfo，尝试从问题中提取
       birthData = extractBirthDataFromQuestion(question);
       console.log('🔍 从问题中提取出生数据:', birthData);

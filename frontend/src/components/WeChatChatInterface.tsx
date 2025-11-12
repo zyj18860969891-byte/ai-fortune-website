@@ -133,19 +133,37 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
       /(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})/
     ];
     
+    console.log('🔍 extractBirthInfo 调用:', { text, patterns: datePatterns.map(p => p.toString()) });
+    
     for (const pattern of datePatterns) {
       const match = text.match(pattern);
+      console.log('🔍 正则匹配结果:', { pattern: pattern.toString(), match });
       if (match) {
-        return {
-          year: parseInt(match[1]),
-          month: parseInt(match[2]),
-          day: parseInt(match[3]),
-          hour: 0, // 默认子时
-          minute: 0
-        };
+        const year = parseInt(match[1]);
+        const month = parseInt(match[2]);
+        const day = parseInt(match[3]);
+        
+        console.log('🔍 提取的数值:', { year, month, day });
+        
+        // 验证数值是否有效
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day) && 
+            year >= 1900 && year <= 2100 && 
+            month >= 1 && month <= 12 && 
+            day >= 1 && day <= 31) {
+          return {
+            year,
+            month,
+            day,
+            hour: 0, // 默认子时
+            minute: 0
+          };
+        } else {
+          console.log('⚠️ 提取的数值无效:', { year, month, day, isNaNYear: isNaN(year), isNaNMonth: isNaN(month), isNaNDay: isNaN(day) });
+        }
       }
     }
     
+    console.log('⚠️ 未找到有效的出生日期');
     return null;
   };
 
