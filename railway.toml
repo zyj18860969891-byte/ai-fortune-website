@@ -10,26 +10,12 @@ restartPolicyMaxRetries = 3
 buildContext = "."
 dockerfilePath = "Dockerfile"
 
+[build.environment]
+NIXPACKS_NODE = "18"
+
 [environments.production]
 NODE_ENV = "production"
 PORT = 3001
-
-[engine]
-type = "free"
-
-[env]
-PORT = "3001"
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
-
-[healthcheck]
-healthcheckPath = "/health"
-healthcheckTimeout = 60
-healthcheckInterval = 15
-healthcheckUnhealthyThreshold = 2
-
-[environments.production]
-NODE_ENV = "production"
 # ModelScope配置
 MODELSCOPE_API_KEY = "ms-bf1291c1-c1ed-464c-b8d8-162fdee96180"
 MODELSCOPE_MODEL = "Qwen/Qwen3-235B-A22B-Instruct-2507"
@@ -38,6 +24,8 @@ MODELSCOPE_BASE_URL = "https://api-inference.modelscope.cn/v1"
 BAZI_MCP_URL = "https://mcp.api-inference.modelscope.net/6a57768488dc47/mcp"
 BAZI_MCP_TIMEOUT = "15000"
 
-# 强制使用 Node.js 18
-[build.environment]
-NIXPACKS_NODE = "18"
+[healthcheck]
+healthcheckPath = "/health"
+healthcheckTimeout = 60
+healthcheckInterval = 15
+healthcheckUnhealthyThreshold = 2
