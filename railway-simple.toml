@@ -2,12 +2,13 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd backend && npm install && npm run build && npm start"
+startCommand = "node start-railway-js-only.js"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 [build.nixpacks]
-buildCommand = "cd backend && npm install"
+buildCommand = "echo 'Using JS-only version, no TypeScript compilation needed'"
+installCommand = "npm install"
 
 [environments.production]
 NODE_ENV = "production"

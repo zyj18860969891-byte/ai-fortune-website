@@ -1,19 +1,24 @@
 [build]
-builder = "NIXPACKS"
-
-[build.nixpacks]
-buildCommand = "npm install && cd backend && npm run build"
-installCommand = "npm install"
-startCommand = "cd backend && npm run build && node dist/server.js"
+builder = "DOCKERFILE"
 
 [deploy]
-startCommand = "cd backend && npm run build && node dist/server.js"
+startCommand = "node start-railway-js-only.js"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+[build.docker]
+buildContext = "."
+dockerfilePath = "Dockerfile"
+
+[environments.production]
+NODE_ENV = "production"
+PORT = 3001
 
 [engine]
 type = "free"
 
 [env]
-PORT = "8080"
+PORT = "3001"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
