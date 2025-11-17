@@ -19,9 +19,13 @@ class RealModelScopeOnlineService {
         const startTime = Date.now();
         try {
             console.log('🎯 开始生成命理分析');
-            // 直接使用路由传递的完整提示词，不重新构建
-            console.log('🔧 使用完整提示词（包含八字数据）');
-            const apiResult = await this.callModelScopeAPI(question);
+            // 使用传入的 systemPrompt，如果有的话
+            if (systemPrompt) {
+                console.log('🔧 使用自定义系统提示词（包含八字数据和分析类型）');
+            } else {
+                console.log('🔧 使用默认系统提示词');
+            }
+            const apiResult = await this.callModelScopeAPI(question, systemPrompt);
             const processingTime = Date.now() - startTime;
             // 简化响应处理，只做基本清理
             const cleanResponse = this.simplifyResponse(apiResult);
@@ -215,7 +219,7 @@ class RealModelScopeOnlineService {
             processingTime: processingTime || 0
         };
     }
-    async callModelScopeAPI(prompt) {
+    async callModelScopeAPI(prompt, systemPrompt) {
         // 等待以避免API频率限制
         const now = Date.now();
         const timeSinceLastCall = now - this.lastApiCallTime;
@@ -225,12 +229,16 @@ class RealModelScopeOnlineService {
             await new Promise(resolve => setTimeout(resolve, waitTime));
         }
         this.lastApiCallTime = Date.now();
+        
+        // 使用传入的 systemPrompt，或使用默认值
+        const finalSystemPrompt = systemPrompt || '你是一位专业的AI算命师，精通塔罗牌、八字命理、星座占星和数字命理。';
+        
         const requestPayload = {
             model: this.config.modelId,
             messages: [
                 {
                     role: 'system',
-                    content: '你是一位专业的AI算命师，精通塔罗牌、八字命理、星座占星和数字命理。'
+                    content: finalSystemPrompt
                 },
                 {
                     role: 'user',

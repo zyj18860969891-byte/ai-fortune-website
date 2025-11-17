@@ -1,0 +1,15 @@
+[build]
+command = "cd ai-fortune-website && cd backend && npm install && npm run build"
+
+[deploy]
+startCommand = "cd ai-fortune-website && cd backend && npm start"
+
+[env]
+NODE_ENV = "production"
+PORT = "3001"
+MODELSCOPE_API_KEY = "ms-bf1291c1-c1ed-464c-b8d8-162fdee96180"
+MODELSCOPE_BASE_URL = "https://api-inference.modelscope.cn/v1"
+MODELSCOPE_MODEL = "Qwen/Qwen3-235B-A22B-Instruct-2507"
+BAZI_MCP_URL = "https://mcp.api-inference.modelscope.net/6a57768488dc47/mcp"
+BAZI_MCP_TIMEOUT = "15000"
+FRONTEND_URL = "https://ai-fortune-website-production.up.railway.app"

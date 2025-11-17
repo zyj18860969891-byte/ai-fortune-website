@@ -250,7 +250,7 @@ export class MsAgentStyleMcpService {
         }
       }
 
-      // 使用streamable_http传输方式（ms-agent默认方式）
+      // 使用Streamable HTTP传输方式
       const transport = new StreamableHTTPClientTransport(
         new URL(serverConfig.url),
         {

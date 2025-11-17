@@ -17,8 +17,10 @@ const PORT = process.env.PORT || 3001;
 // 中间件配置
 app.use((0, helmet_1.default)()); // 安全头
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-    credentials: true
+    origin: process.env.FRONTEND_URL || (process.env.NODE_ENV === 'production' ? '*' : 'http://localhost:5173'),
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use((0, morgan_1.default)('combined')); // 请求日志
 // 修复中文字符编码问题
@@ -51,10 +53,18 @@ app.get('*', (req, res, next) => {
 app.use('/api/fortune', fortune_1.default);
 // 健康检查接口
 app.get('/health', (req, res) => {
+    console.log('🔍 [健康检查] 收到请求:', {
+        method: req.method,
+        url: req.url,
+        headers: req.headers,
+        timestamp: new Date().toISOString()
+    });
     res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
-        service: 'ai-fortune-backend'
+        service: 'ai-fortune-backend',
+        environment: process.env.NODE_ENV || 'development',
+        port: process.env.PORT || '8080'
     });
 });
 // 错误处理中间件

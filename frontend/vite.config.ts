@@ -4,12 +4,13 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: 'https://ai-fortune-website-production.up.railway.app',
         changeOrigin: true,
-        secure: true
+        secure: true,
+        rewrite: (path) => path
       }
     }
   },

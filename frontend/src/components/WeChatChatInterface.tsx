@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getSessionId } from '../services/api';
 
 interface Message {
   id: string;
@@ -75,7 +76,7 @@ export const WeChatChatInterface: React.FC<WeChatChatInterfaceProps> = ({
         question: inputText.trim(),
         type: fortuneType,
         context: messages.slice(-6).map(m => `${m.type === 'user' ? '用户' : '占卜师'}: ${m.content}`).join('\n'),
-        sessionId: `session-${Date.now()}`
+        sessionId: getSessionId()  // ✅ 使用getSessionId()获取持久化的会话ID
       };
       
       // 检查是否为关系分析请求
