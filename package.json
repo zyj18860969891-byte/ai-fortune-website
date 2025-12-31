@@ -8,7 +8,8 @@
     "start": "node start-railway-js-only.js",
     "dev": "node start-railway-js-only.js",
     "docker-build": "docker build -t ai-fortune-website .",
-    "vercel-build": "cd frontend && npm install && npm run build"
+    "vercel-build": "cd frontend && npm install && npm run build",
+    "postinstall": ""
   },
   "dependencies": {
     "axios": "^1.13.2",
@@ -23,8 +24,5 @@
     "inference"
   ],
   "author": "AI Assistant",
-  "license": "MIT",
-  "scripts": {
-    "postinstall": ""
-  }
+  "license": "MIT"
 }
