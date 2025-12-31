@@ -1,0 +1,16 @@
+# NIXPACKS配置文件
+# 禁用所有npm脚本以避免构建问题
+
+# 设置环境变量
+export NIXPACKS_DISABLE_SCRIPTS=true
+export NPM_CONFIG_IGNORE_SCRIPTS=true
+export NPM_CONFIG_POSTINSTALL=false
+
+# 构建命令
+build_cmd="echo 'Skipping build - using pre-built files'"
+
+# 启动命令
+start_cmd="node start-railway-js-only.js"
+
+# 安装命令
+install_cmd="npm install --production --omit=dev --ignore-scripts --no-optional"
