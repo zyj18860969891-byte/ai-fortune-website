@@ -23,5 +23,8 @@
     "inference"
   ],
   "author": "AI Assistant",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "postinstall": ""
+  }
 }

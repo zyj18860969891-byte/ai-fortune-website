@@ -1,16 +1,14 @@
+# 使用Node.js 18 Alpine镜像
 FROM node:18-alpine
 
+# 设置工作目录
 WORKDIR /app
 
-# 复制所有文件（包括backend目录）
+# 复制所有文件
 COPY . .
 
-# 复制 package.json 和 package-lock.json
-COPY package*.json ./
-COPY backend/package*.json ./backend/
-
-# 安装生产依赖
-RUN npm install --production --omit=dev
+# 安装依赖（完全禁用脚本）
+RUN npm install --production --omit=dev --ignore-scripts --no-optional
 
 # 暴露端口
 EXPOSE 3001
