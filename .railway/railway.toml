@@ -1,8 +1,8 @@
 [build]
-command = "cd ai-fortune-website && cd backend && npm install && npm run build"
+builder = "NIXPACKS"
 
 [deploy]
-startCommand = "cd ai-fortune-website && cd backend && npm start"
+startCommand = "node start-railway-js-only.js"
 
 [env]
 NODE_ENV = "production"
